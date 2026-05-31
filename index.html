@@ -12,11 +12,13 @@
     <nav class="sidebar">
         <div class="logo" onclick="switchView('page-home')" style="cursor: pointer;" data-config-text="LOGO_TEXT">FNTD2 DB</div>
         <div class="nav-links">
-            <button class="nav-btn active" data-target="page-home" data-config-text="NAV_BUTTONS.HOME">🏠 Home</button>
-            <button class="nav-btn" data-target="page-finder" data-config-text="NAV_BUTTONS.FINDER">🔍 Unit Finder</button>
-            <button class="nav-btn" data-target="page-tierlist" data-config-text="NAV_BUTTONS.TIERLIST">📊 Tierlist</button>
-            <button class="nav-btn" data-target="page-generator" data-config-text="NAV_BUTTONS.GENERATOR">🎲 Team Gen</button>
-            <button class="nav-btn" data-target="page-codex" data-config-text="NAV_BUTTONS.CODEX">👾 Codex</button>
+            <button class="nav-btn active" data-target="page-home" data-path="" data-config-text="NAV_BUTTONS.HOME">🏠 Home</button>
+            <button class="nav-btn" data-target="page-finder" data-path="finder" data-config-text="NAV_BUTTONS.FINDER">🔍 Unit Finder</button>
+            <button class="nav-btn" data-target="page-tierlist" data-path="tierlist" data-config-text="NAV_BUTTONS.TIERLIST">📊 Tierlist</button>
+            <button class="nav-btn" data-target="page-generator" data-path="generator" data-config-text="NAV_BUTTONS.GENERATOR">🎲 Team Gen</button>
+            <button class="nav-btn" data-target="page-trading" data-path="trading" data-config-text="NAV_BUTTONS.TRADING">💱 Trading</button>
+            <button class="nav-btn" data-target="page-profile" data-path="profile" data-config-text="NAV_BUTTONS.PROFILE">👤 Pro-file</button>
+            <button class="nav-btn" data-target="page-codex" data-path="codex" data-config-text="NAV_BUTTONS.CODEX">👾 Codex</button>
         </div>
         <div class="sidebar-footer">
             <button class="settings-trigger-btn" onclick="openSettingsModal()" data-config-text="NAV_BUTTONS.SETTINGS">⚙️ Settings</button>
@@ -36,6 +38,10 @@
                         <div class="link-button-cluster">
                             <a href="https://discord.gg/fntd2" target="_blank" class="action-link-btn discord-primary" data-config-text="HOME.COMMUNITY_OFFICIAL_LINK">Official Discord</a>
                             <a href="https://discord.gg/fntd2db" target="_blank" class="action-link-btn discord-secondary" data-config-text="HOME.COMMUNITY_DB_LINK">DB Discord</a>
+                        </div>
+                        <div class="link-button-cluster" style="margin-top:12px; gap:10px;">
+                            <a href="/tos" onclick="navigateToPage('page-tos'); return false;" class="action-link-btn" style="background:#2f3430;">Terms of Service</a>
+                            <a href="/privacy" onclick="navigateToPage('page-privacy'); return false;" class="action-link-btn" style="background:#2f3430;">Privacy Policy</a>
                         </div>
                     </div>
                 </div>
@@ -190,6 +196,14 @@
                 <h2 class="page-section-title" data-config-text="GENERATOR.TITLE">🎲 Build Your Team</h2>
             </div>
 
+            <div class="team-slot-shell animate-pop" style="animation-delay: 0.1s;">
+                <div class="team-slot-header-row">
+                    <h3 style="margin-bottom: 16px; color: var(--text-heading); font-size: 16px;" data-config-text="GENERATOR.SELECTED_TEAM">Team Slots</h3>
+                    <button class="action-btn-primary small" onclick="openTeamUnitSelector(getFirstEmptySlotIndex())">Add Unit</button>
+                </div>
+                <div id="team-slot-grid" class="team-slot-grid"></div>
+            </div>
+
             <div id="team-generator-panel" class="team-panel">
                 <div class="layout-split">
                     <aside class="filters-sidebar animate-pop" style="animation-delay: 0.05s;">
@@ -205,13 +219,12 @@
                         <button class="action-btn-primary" onclick="generateCreatorSquad()" data-config-text="GENERATOR.GENERATE_TEAM">Generate Team</button>
                     </aside>
                     <div class="grid-content-area animate-pop" style="animation-delay: 0.1s;">
-                        <h3 style="margin-bottom: 20px; color: var(--text-heading); font-size: 16px;" data-config-text="GENERATOR.YOUR_SQUAD">Your Squad (Max 6)</h3>
                         <div id="generator-grid-container" class="unit-grid-layout"></div>
                     </div>
                 </div>
             </div>
 
-            <div id="team-rating-panel" class="team-panel hidden">
+            <div id="team-rating-panel" class="team-panel" style="display:none;">
                 <div class="layout-split">
                     <aside class="filters-sidebar animate-pop" style="animation-delay: 0.05s;">
                         <h3 data-config-text="GENERATOR.RATING_TITLE">Team Evaluation</h3>
@@ -221,28 +234,7 @@
                         </div>
                     </aside>
                     <div class="grid-content-area animate-pop" style="animation-delay: 0.1s;">
-                        <h3 style="margin-bottom: 16px; color: var(--text-heading); font-size: 16px;" data-config-text="GENERATOR.SELECTED_TEAM">Current Squad</h3>
-                        <div id="team-rating-team-grid" class="unit-grid-layout"></div>
-                        <div class="team-builder-panel">
-                            <div class="team-builder-header">
-                                <h4 data-config-text="GENERATOR.MANUAL_BUILDER">Manual Builder</h4>
-                                <button class="action-btn-secondary inline-btn" onclick="clearCurrentTeam()" data-config-text="GENERATOR.CLEAR_TEAM">Clear Team</button>
-                            </div>
-                            <div class="builder-controls">
-                                <div class="search-box-wrapper" style="width: 100%; margin-bottom: 12px;">
-                                    <input type="text" id="team-builder-search" placeholder="Search units..." data-config-placeholder="GENERATOR.BUILDER_SEARCH_PLACEHOLDER" oninput="renderManualBuilderPool()">
-                                </div>
-                                <div class="builder-filter-row">
-                                    <select id="team-builder-class-filter" onchange="renderManualBuilderPool()">
-                                        <option value="All" data-config-text="GENERATOR.BUILDER_FILTER_CLASS">All Classes</option>
-                                    </select>
-                                    <select id="team-builder-subclass-filter" onchange="renderManualBuilderPool()">
-                                        <option value="All" data-config-text="GENERATOR.BUILDER_FILTER_SUBCLASS">All Subclasses</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div id="team-builder-pool" class="unit-grid-layout"></div>
-                        </div>
+                        
                         <div class="rating-feedback-panel">
                             <h4 data-config-text="GENERATOR.RATING_MISSING">What Your Team Needs</h4>
                             <ul id="team-rating-issues" class="feedback-list"></ul>
@@ -251,6 +243,84 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </section>
+
+        <section id="page-trading" class="page">
+            <div class="control-filter-bar animate-pop">
+                <h2 style="color: var(--text-heading); font-size: 24px; margin: 0;" data-config-text="TRADING.TITLE">💱 Trading Hub</h2>
+            </div>
+            <div class="trade-tab-row animate-pop" style="animation-delay: 0.05s;">
+                <button id="trade-tab-global" class="trade-tab active" onclick="switchTradeTab('global')">Global Offers</button>
+                <button id="trade-tab-your" class="trade-tab" onclick="switchTradeTab('your')">Your Offers</button>
+                <button id="trade-tab-create" class="trade-tab" onclick="switchTradeTab('create')">Create Offer</button>
+            </div>
+            <div class="trade-tab-panel" id="trade-global-panel">
+                <div class="trade-list-header"><h3>Global Offers</h3></div>
+                <div id="trade-global-offers" class="trade-offers-grid"></div>
+            </div>
+            <div class="trade-tab-panel hidden" id="trade-your-panel">
+                <div class="trade-list-header"><h3>Your Offers</h3></div>
+                <div id="trade-your-offers" class="trade-offers-grid"></div>
+            </div>
+            <div class="trade-tab-panel hidden" id="trade-create-panel">
+                <div id="trade-form-wrapper">
+                    <div class="trade-create-columns">
+                        <div class="trade-offer-group">
+                            <h4>Your Offer</h4>
+                            <div class="trade-selected-units" id="trade-offer-units"></div>
+                            <button id="trade-add-offer-unit-button" class="action-btn-secondary small" onclick="openTradeUnitSelector('offer')">Add unit</button>
+                            <label data-config-text="TRADING.SOULS_LABEL">Souls Offered</label>
+                            <input id="trade-offer-souls" type="number" min="0" value="0" />
+                        </div>
+                        <div class="trade-offer-group">
+                            <h4>Their Offer</h4>
+                            <div class="trade-selected-units" id="trade-want-units"></div>
+                            <button id="trade-add-want-unit-button" class="action-btn-secondary small" onclick="openTradeUnitSelector('want')">Add unit</button>
+                            <label data-config-text="TRADING.SOULS_LABEL">Souls Wanted</label>
+                            <input id="trade-want-souls" type="number" min="0" value="0" />
+                        </div>
+                    </div>
+                    <div class="trade-create-footer">
+                        <div id="trade-auth-warning" class="trade-notice-card"></div>
+                        <button id="trade-submit-button" class="action-btn-primary" onclick="createTradeOffer()" data-config-text="TRADING.ADD_OFFER_BUTTON">Create Offer</button>
+                    </div>
+                </div>
+                
+            </div>
+        </section>
+
+        <section id="page-profile" class="page">
+            <div class="control-filter-bar animate-pop">
+                <h2 style="color: var(--text-heading); font-size: 24px; margin: 0;" data-config-text="PROFILE.TITLE">👤 Pro-file</h2>
+            </div>
+            <div class="profile-page-content animate-pop" style="animation-delay: 0.05s;">
+                <div id="profile-card" class="profile-card"></div>
+                <div class="profile-actions-row">
+                    <button id="profile-login-button" class="action-btn-primary" onclick="openRobloxAuth()" data-config-text="PROFILE.CONNECT_BUTTON">Connect Roblox Account</button>
+                    <button id="profile-logout-button" class="action-btn-secondary" onclick="logoutProfile()" data-config-text="PROFILE.LOGOUT_BUTTON" style="display:none;">Sign Out</button>
+                </div>
+                <p class="help-note" data-config-text="PROFILE.LOGIN_HELP">Use your Pro-file login to post and manage trade offers.</p>
+            </div>
+        </section>
+
+        <section id="page-tos" class="page">
+            <div class="control-filter-bar animate-pop">
+                <h2 style="color: var(--text-heading); font-size: 24px; margin: 0;">Terms of Service</h2>
+            </div>
+            <div class="content-card animate-pop" style="padding: 24px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: var(--global-radius);">
+                <p>This site collects Roblox usernames, user IDs, and profile tokens only to support the trading feature. Your account details are used to identify trade offers and allow you to manage your own offers.</p>
+                <p>We do not sell or share your information outside the trading system. By using the trading feature, you agree that your Roblox information may be stored locally and optionally submitted to the trade backend for offer management.</p>
+            </div>
+        </section>
+
+        <section id="page-privacy" class="page">
+            <div class="control-filter-bar animate-pop">
+                <h2 style="color: var(--text-heading); font-size: 24px; margin: 0;">Privacy Policy</h2>
+            </div>
+            <div class="content-card animate-pop" style="padding: 24px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: var(--global-radius);">
+                <p>We collect Roblox usernames, IDs, and profile login tokens for the sole purpose of powering the trading feature and associating offers with your account.</p>
+                <p>Information is stored locally in your browser and may be sent to the configured cloud backend only when creating or managing trade offers. No additional personal data is collected through this application.</p>
             </div>
         </section>
 
@@ -272,6 +342,48 @@
         </section>
 
     </main>
+
+    <div id="trade-unit-selector" class="team-unit-selector hidden">
+        <div class="team-selector-header">
+            <h4>Select unit for <span id="trade-selector-side-label"></span></h4>
+            <button class="modal-close-trigger" onclick="closeTradeUnitSelector()">&times;</button>
+        </div>
+        <div class="builder-controls">
+            <div class="search-box-wrapper" style="width: 100%; margin-bottom: 12px;">
+                <input type="text" id="trade-selector-search" placeholder="Filter units..." oninput="renderTradeUnitSelector()">
+            </div>
+            <div class="builder-filter-row" style="margin-bottom:12px;">
+                <select id="trade-selector-class-filter" onchange="renderTradeUnitSelector()">
+                    <option value="All">All Classes</option>
+                </select>
+                <select id="trade-selector-subclass-filter" onchange="renderTradeUnitSelector()">
+                    <option value="All">All Subclasses</option>
+                </select>
+            </div>
+        </div>
+        <div id="trade-selector-list" class="unit-grid-layout"></div>
+    </div>
+
+    <div id="team-unit-selector" class="team-unit-selector hidden">
+        <div class="team-selector-header">
+            <h4>Select unit for slot <span id="team-selector-slot-label"></span></h4>
+            <button class="modal-close-trigger" onclick="closeTeamUnitSelector()">&times;</button>
+        </div>
+        <div class="builder-controls">
+            <div class="search-box-wrapper" style="width: 100%; margin-bottom: 12px;">
+                <input type="text" id="team-selector-search" placeholder="Filter units..." oninput="renderTeamUnitSelector()">
+            </div>
+            <div class="builder-filter-row">
+                <select id="team-selector-class-filter" onchange="renderTeamUnitSelector()">
+                    <option value="All">All Classes</option>
+                </select>
+                <select id="team-selector-subclass-filter" onchange="renderTeamUnitSelector()">
+                    <option value="All">All Subclasses</option>
+                </select>
+            </div>
+        </div>
+        <div id="team-selector-list" class="unit-grid-layout"></div>
+    </div>
 
     <div id="settings-overlay" class="overlay-blur-wrapper">
         <div class="modal-card-body pop-up">

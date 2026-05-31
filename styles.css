@@ -279,6 +279,313 @@ body {
     color: var(--text-heading);
 }
 
+.trade-tab-row,
+.team-slot-shell {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.trade-tab {
+    border: 1px solid var(--border-matrix);
+    background: transparent;
+    color: var(--text-body-main);
+    padding: 10px 16px;
+    border-radius: var(--global-radius);
+    cursor: pointer;
+    transition: all var(--anim-speed-factor);
+}
+
+.trade-tab.active,
+.team-tab.active {
+    background: var(--color-accent-blue);
+    color: #ffffff;
+    border-color: var(--color-accent-blue);
+}
+
+.trade-tab-panel {
+    border: 1px solid var(--border-matrix);
+    border-radius: var(--global-radius);
+    background: var(--bg-input-field);
+    padding: 18px;
+    margin-bottom: 20px;
+}
+
+.team-slot-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(100px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.team-slot-card {
+    min-height: 100px;
+    border: 1px solid var(--border-matrix);
+    border-radius: var(--global-radius);
+    background: var(--bg-card-panel);
+    padding: 14px;
+    display: grid;
+    align-items: center;
+    justify-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: border-color var(--anim-speed-factor), background var(--anim-speed-factor);
+}
+
+.team-slot-card:hover {
+    border-color: var(--color-accent-blue);
+}
+
+.team-slot-card .slot-index {
+    font-size: 12px;
+    color: var(--text-body-muted);
+}
+
+.team-slot-card .slot-title {
+    font-weight: 700;
+    color: var(--text-heading);
+    text-align: center;
+}
+
+.team-unit-selector {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    min-height: 100%;
+    height: 100%;
+    padding: 24px;
+    background: rgba(10, 15, 13, 0.92);
+    border: none;
+    border-radius: 0;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    overflow-y: auto;
+    backdrop-filter: blur(8px);
+}
+
+.team-unit-selector > .team-selector-header,
+.team-unit-selector > .builder-controls,
+.team-unit-selector > .unit-grid-layout {
+    width: min(100%, 1020px);
+}
+
+.team-unit-selector.hidden {
+    display: none;
+}
+
+.team-unit-selector.active-view { display: flex; }
+
+.team-selector-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.team-selector-header h4 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.content-card {
+    border: 1px solid var(--border-matrix);
+    border-radius: var(--global-radius);
+    background: var(--bg-input-field);
+    padding: 20px;
+    color: var(--text-body-main);
+}
+
+.trade-list-header {
+    margin-bottom: 14px;
+}
+
+.trade-notice-card {
+    margin-bottom: 18px;
+    padding: 16px;
+    border-radius: var(--global-radius);
+    border: 1px solid var(--border-matrix);
+    background: var(--bg-input-field);
+    color: var(--text-body-main);
+    font-size: 14px;
+}
+
+.trade-notice-card.warning {
+    border-color: var(--color-accent-blue);
+}
+
+.trade-notice-card.success {
+    border-color: #6abf69;
+}
+
+.trade-form-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.trade-form-grid input,
+.trade-form-grid select,
+.trade-form-grid textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-matrix);
+    border-radius: var(--global-radius);
+    background: var(--bg-input-field);
+    color: var(--text-body-main);
+}
+
+.trade-offers-grid {
+    display: grid;
+    gap: 14px;
+}
+
+.trade-offer-card {
+    background: var(--bg-input-field);
+    border: 1px solid var(--border-matrix);
+    border-radius: var(--global-radius);
+    padding: 16px;
+    display: grid;
+    gap: 14px;
+}
+
+.trade-offer-row,
+.trade-card-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 14px;
+    flex-wrap: wrap;
+}
+
+.trade-create-columns {
+    display: grid;
+    gap: 18px;
+    margin-bottom: 18px;
+}
+
+@media (min-width: 720px) {
+    .trade-create-columns {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.trade-offer-group {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-matrix);
+    border-radius: var(--global-radius);
+    padding: 18px;
+}
+
+.trade-selected-units {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 64px;
+    padding: 10px;
+    border: 1px solid var(--border-matrix);
+    border-radius: var(--global-radius);
+    background: var(--bg-input-field);
+}
+
+.trade-unit-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-matrix);
+    font-size: 13px;
+}
+
+.trade-unit-chip button {
+    border: none;
+    background: transparent;
+    color: var(--text-body-main);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.trade-chip-empty {
+    color: var(--text-body-muted);
+    font-size: 14px;
+}
+
+.trade-create-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.trade-souls-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-body-main);
+    font-size: 12px;
+    margin-left: 8px;
+}
+
+.trade-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+    font-size: 12px;
+    opacity: 0.85;
+}
+
+.trade-empty-state {
+    color: var(--text-body-muted);
+    padding: 18px;
+    background: var(--bg-input-field);
+    border: 1px dashed var(--border-matrix);
+    border-radius: var(--global-radius);
+}
+
+.profile-card {
+    background: var(--bg-input-field);
+    border: 1px solid var(--border-matrix);
+    border-radius: var(--global-radius);
+    padding: 20px;
+    margin-bottom: 14px;
+}
+
+.profile-block {
+    display: grid;
+    gap: 14px;
+}
+
+.profile-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--text-heading);
+}
+
+.profile-detail-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 14px;
+}
+
+.profile-actions-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
 .team-builder-panel {
     margin-top: 24px;
     background: var(--bg-input-field);

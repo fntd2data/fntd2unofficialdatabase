@@ -2,11 +2,267 @@ let currentFiltersState = {
     search: "", sort: "high-low", rarities: [], ranks: [], classes: [], subclasses: [], synergy: "All"
 };
 let currentTeam = [];
+let teamSlots = Array(6).fill(null);
+let activeTeamSlotIndex = null;
+let currentTradeTab = 'global';
+let tradeOfferUnits = [];
+let tradeWantUnits = [];
+let tradeSelectorSide = null;
 let detailsActiveUnit = null;
 let simulatedLevel = 1;
 let simulatedEnchant = "None";
 let isShinyModeActive = false;
- 
+const PAGE_PATH_MAP = {
+    "": "page-home",
+    "index.html": "page-home",
+    "home": "page-home",
+    "finder": "page-finder",
+    "tierlist": "page-tierlist",
+    "generator": "page-generator",
+    "codex": "page-codex",
+    "trading": "page-trading",
+    "profile": "page-profile",
+    "tos": "page-tos",
+    "privacy": "page-privacy"
+};
+const PAGE_ID_TO_PATH = Object.fromEntries(Object.entries(PAGE_PATH_MAP).map(([path, pageId]) => [pageId, path]));
+
+function getActiveTeam() {
+    return teamSlots.filter(Boolean);
+}
+
+function syncCurrentTeamWithSlots() {
+    currentTeam = getActiveTeam();
+}
+
+function clearTeamSlots() {
+    teamSlots = Array(6).fill(null);
+    syncCurrentTeamWithSlots();
+}
+
+function getPageIdFromPath(path) {
+    const normalized = path.replace(/\\/g, '/').split('/').filter(Boolean).pop() || '';
+    return PAGE_PATH_MAP[normalized] || 'page-home';
+}
+
+function updateActiveNav(pageId) {
+    document.querySelectorAll('.sidebar .nav-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-target') === pageId);
+    });
+}
+
+function navigateToPage(pageId, replace = false) {
+    const targetPage = document.getElementById(pageId);
+    if (!targetPage) return;
+    document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+    targetPage.classList.add('active');
+    updateActiveNav(pageId);
+
+    const segment = PAGE_ID_TO_PATH[pageId] || '';
+    const url = segment ? `/${segment}` : '/';
+    if (replace) {
+        history.replaceState({ pageId }, '', url);
+    } else {
+        history.pushState({ pageId }, '', url);
+    }
+}
+
+function handleRoute() {
+    const pageId = getPageIdFromPath(window.location.pathname);
+    navigateToPage(pageId, true);
+}
+
+function openTeamUnitSelector(slotIndex) {
+    activeTeamSlotIndex = slotIndex;
+    const label = document.getElementById('team-selector-slot-label');
+    if (label) label.textContent = slotIndex + 1;
+    const selector = document.getElementById('team-unit-selector');
+    if (selector) {
+        selector.classList.remove('hidden');
+        selector.classList.add('active-view');
+    }
+    renderTeamUnitSelector();
+}
+
+function closeTeamUnitSelector() {
+    activeTeamSlotIndex = null;
+    const selector = document.getElementById('team-unit-selector');
+    if (selector) {
+        selector.classList.remove('active-view');
+        selector.classList.add('hidden');
+    }
+}
+
+function renderTeamSlotGrid() {
+    const container = document.getElementById('team-slot-grid');
+    if (!container) return;
+    container.innerHTML = teamSlots.map((slot, index) => {
+        const title = slot ? slot.name : 'Add unit';
+        const summary = slot ? `${slot.rarity} · ${slot.class}` : 'Empty slot';
+        return `
+            <div class="team-slot-card" onclick="openTeamUnitSelector(${index})">
+                <div class="slot-index">Slot ${index + 1}</div>
+                <div class="slot-title">${title}</div>
+                <div class="slot-summary">${summary}</div>
+                ${slot ? `<button class="action-btn-secondary small" onclick="event.stopPropagation(); removeTeamMember('${slot.id}')">Remove</button>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function renderTeamUnitSelector() {
+    const list = document.getElementById('team-selector-list');
+    if (!list) return;
+    const searchTerm = (document.getElementById('team-selector-search')?.value.trim().toLowerCase() || '');
+    const classFilter = document.getElementById('team-selector-class-filter')?.value || 'All';
+    const subclassFilter = document.getElementById('team-selector-subclass-filter')?.value || 'All';
+
+    const availableUnits = DB_UNITS.filter(unit => {
+        const alreadySelected = teamSlots.some(slot => slot?.id === unit.id);
+        const matchesSearch = unit.name.toLowerCase().includes(searchTerm) || unit.id.toLowerCase().includes(searchTerm);
+        const matchesClass = classFilter === 'All' || unit.class === classFilter;
+        const matchesSubclass = subclassFilter === 'All' || unit.subclasses.includes(subclassFilter);
+        return !alreadySelected && matchesSearch && matchesClass && matchesSubclass;
+    });
+
+    list.innerHTML = availableUnits.map(unit => `
+        <div class="unit-card-square animate-pop rarity-${unit.rarity.replace(/\s+/g,'-')}" onclick="setTeamSlotUnit('${unit.id}')">
+            <div class="square-title-top">${unit.name}</div>
+            <div class="square-cost-bottom">$${unit.placementCost}</div>
+            <div class="square-element-icon">${unit.element.substring(0,1).toUpperCase()}</div>
+        </div>
+    `).join('');
+}
+
+function setTeamSlotUnit(unitId) {
+    if (activeTeamSlotIndex === null) return;
+    const existingSlot = teamSlots.findIndex(slot => slot?.id === unitId);
+    if (existingSlot !== -1) {
+        teamSlots[existingSlot] = null;
+    }
+    const unit = DB_UNITS.find(u => u.id === unitId);
+    if (!unit) return;
+    teamSlots[activeTeamSlotIndex] = unit;
+    syncCurrentTeamWithSlots();
+    renderTeamSlotGrid();
+    renderGridContainer(currentTeam, 'generator-grid-container');
+    renderManualBuilderPool();
+    updateTeamRatingPanel();
+    closeTeamUnitSelector();
+}
+
+function switchTradeTab(mode) {
+    currentTradeTab = mode;
+    document.querySelectorAll('.trade-tab').forEach(btn => btn.classList.toggle('active', btn.id === `trade-tab-${mode}`));
+    document.getElementById('trade-global-panel').classList.toggle('hidden', mode !== 'global');
+    document.getElementById('trade-your-panel').classList.toggle('hidden', mode !== 'your');
+    document.getElementById('trade-create-panel').classList.toggle('hidden', mode !== 'create');
+    if (mode === 'global' || mode === 'your') {
+        renderTradeOffers();
+    }
+}
+
+function getFirstEmptySlotIndex() {
+    const firstEmpty = teamSlots.findIndex(slot => !slot);
+    return firstEmpty === -1 ? teamSlots.length - 1 : firstEmpty;
+}
+
+function openTradeUnitSelector(side) {
+    tradeSelectorSide = side;
+    const sideLabel = document.getElementById('trade-selector-side-label');
+    if (sideLabel) sideLabel.textContent = side === 'offer' ? 'your offer' : 'their offer';
+    const selector = document.getElementById('trade-unit-selector');
+    if (selector) {
+        selector.classList.remove('hidden');
+        selector.classList.add('active-view');
+    }
+    renderTradeUnitSelector();
+}
+
+function closeTradeUnitSelector() {
+    tradeSelectorSide = null;
+    const selector = document.getElementById('trade-unit-selector');
+    if (selector) {
+        selector.classList.remove('active-view');
+        selector.classList.add('hidden');
+    }
+}
+
+function renderTradeUnitSelector() {
+    const list = document.getElementById('trade-selector-list');
+    if (!list) return;
+    const searchTerm = (document.getElementById('trade-selector-search')?.value.trim().toLowerCase() || '');
+    const classFilter = document.getElementById('trade-selector-class-filter')?.value || 'All';
+    const subclassFilter = document.getElementById('trade-selector-subclass-filter')?.value || 'All';
+
+    const allSelectedIds = new Set([...tradeOfferUnits, ...tradeWantUnits].map(u => u.id));
+
+    const availableUnits = DB_UNITS.filter(unit => {
+        const alreadySelected = allSelectedIds.has(unit.id);
+        const matchesSearch = unit.name.toLowerCase().includes(searchTerm) || unit.id.toLowerCase().includes(searchTerm);
+        const matchesClass = classFilter === 'All' || unit.class === classFilter;
+        const matchesSubclass = subclassFilter === 'All' || unit.subclasses.includes(subclassFilter);
+        return !alreadySelected && matchesSearch && matchesClass && matchesSubclass;
+    });
+
+    list.innerHTML = availableUnits.map(unit => `
+        <div class="unit-card-square animate-pop rarity-${unit.rarity.replace(/\s+/g,'-')}" onclick="selectTradeUnit('${unit.id}')">
+            <div class="square-title-top">${unit.name}</div>
+            <div class="square-cost-bottom">$${unit.placementCost}</div>
+            <div class="square-element-icon">${unit.element.substring(0,1).toUpperCase()}</div>
+        </div>
+    `).join('');
+}
+
+function selectTradeUnit(unitId) {
+    const unit = DB_UNITS.find(u => u.id === unitId);
+    if (!unit || !tradeSelectorSide) return;
+    const targetList = tradeSelectorSide === 'offer' ? tradeOfferUnits : tradeWantUnits;
+    const alreadyExists = targetList.some(item => item.id === unitId);
+    if (alreadyExists) return;
+    targetList.push(unit);
+    renderTradeCreateSelections();
+    closeTradeUnitSelector();
+}
+
+function removeTradeCreateUnit(side, unitId) {
+    const targetList = side === 'offer' ? tradeOfferUnits : tradeWantUnits;
+    const index = targetList.findIndex(item => item.id === unitId);
+    if (index !== -1) {
+        targetList.splice(index, 1);
+    }
+    renderTradeCreateSelections();
+}
+
+function renderTradeCreateSelections() {
+    const offerContainer = document.getElementById('trade-offer-units');
+    const wantContainer = document.getElementById('trade-want-units');
+    if (offerContainer) {
+        offerContainer.innerHTML = tradeOfferUnits.length ? tradeOfferUnits.map(unit => `
+            <div class="trade-unit-chip">
+                ${unit.name}
+                <button onclick="removeTradeCreateUnit('offer', '${unit.id}')">×</button>
+            </div>
+        `).join('') : '<div class="trade-chip-empty">No units selected</div>';
+    }
+    if (wantContainer) {
+        wantContainer.innerHTML = tradeWantUnits.length ? tradeWantUnits.map(unit => `
+            <div class="trade-unit-chip">
+                ${unit.name}
+                <button onclick="removeTradeCreateUnit('want', '${unit.id}')">×</button>
+            </div>
+        `).join('') : '<div class="trade-chip-empty">No units selected</div>';
+    }
+}
+
+function resetTradeCreateForm() {
+    tradeOfferUnits = [];
+    tradeWantUnits = [];
+    if (document.getElementById('trade-offer-souls')) document.getElementById('trade-offer-souls').value = '0';
+    if (document.getElementById('trade-want-souls')) document.getElementById('trade-want-souls').value = '0';
+    renderTradeCreateSelections();
+}
+
 function migrateObtainmentsFormat() {
     DB_UNITS.forEach(unit => {
             if (typeof unit.obtainments === 'string') {
@@ -104,25 +360,29 @@ document.addEventListener("DOMContentLoaded", () => {
     regenerateComputedRanks();
     applyConfigBindings();
     initViewRoutingNavs();
+    initProfileAndTrading();
     buildFilterCheckboxLayouts();
     applyFinderFilters();
     renderTierlist();
     renderEnemyCodex();
     renderManualBuilderPool();
+    renderTeamSlotGrid();
+    switchTeamCreatorTab('generate');
     initSystemModalEvents();
+    handleRoute();
+    window.addEventListener('popstate', handleRoute);
     initWelcomeModal();
 });
 
  
 function initViewRoutingNavs() {
     document.querySelectorAll('.sidebar .nav-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.sidebar .nav-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            
-            btn.classList.add('active');
+        btn.addEventListener('click', (event) => {
+            event.preventDefault();
             const target = btn.getAttribute('data-target');
-            document.getElementById(target).classList.add('active');
+            if (target) {
+                navigateToPage(target);
+            }
         });
     });
 }
@@ -134,6 +394,255 @@ function switchView(targetPageId) {
     document.getElementById(targetPageId).classList.add('active');
     const sideBtn = document.querySelector(`.sidebar .nav-btn[data-target="${targetPageId}"]`);
     if(sideBtn) sideBtn.classList.add('active');
+}
+
+function getSavedProfile() {
+    try {
+        return JSON.parse(localStorage.getItem('fntd2_profile') || 'null');
+    } catch (err) {
+        return null;
+    }
+}
+
+function saveProfile(profile) {
+    localStorage.setItem('fntd2_profile', JSON.stringify(profile));
+}
+
+function clearProfile() {
+    localStorage.removeItem('fntd2_profile');
+}
+
+function parseAuthRedirect() {
+    const params = new URLSearchParams(window.location.search);
+    const authToken = params.get('auth_token') || params.get('token');
+    const robloxId = params.get('robloxId') || params.get('roblox_id');
+    const robloxName = params.get('robloxName') || params.get('roblox_name');
+    if (authToken && (robloxId || robloxName)) {
+        const profile = {
+            token: authToken,
+            robloxId: robloxId || 'unknown',
+            robloxName: robloxName || 'unknown',
+            createdAt: new Date().toISOString(),
+        };
+        saveProfile(profile);
+        params.delete('auth_token');
+        params.delete('token');
+        params.delete('robloxId');
+        params.delete('roblox_id');
+        params.delete('robloxName');
+        params.delete('roblox_name');
+        const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+        window.history.replaceState({}, '', newUrl);
+        return profile;
+    }
+    return getSavedProfile();
+}
+
+function openRobloxAuth() {
+    const oauthUrl = CONFIG.LINKS.ROBLOX_OAUTH_URL || 'https://your-cloudflare-domain.com/auth/roblox';
+    const redirect = encodeURIComponent(window.location.origin + window.location.pathname);
+    window.location.href = `${oauthUrl}?redirect_uri=${redirect}`;
+}
+
+function logoutProfile() {
+    clearProfile();
+    renderProfileState();
+    updateTradingAuthUI();
+    renderTradeOffers();
+}
+
+function renderProfileState() {
+    const profile = getSavedProfile();
+    const profileCard = document.getElementById('profile-card');
+    const loginButton = document.getElementById('profile-login-button');
+    const logoutButton = document.getElementById('profile-logout-button');
+
+    if (!profile) {
+        profileCard.innerHTML = `<div class="profile-block"><p>${CONFIG.getText('PROFILE.NOT_LOGGED_IN')}</p></div>`;
+        loginButton.style.display = 'inline-flex';
+        logoutButton.style.display = 'none';
+        return;
+    }
+
+    const userName = profile.robloxName || 'Roblox User';
+    profileCard.innerHTML = `
+        <div class="profile-block">
+            <div class="profile-header"><h3>${CONFIG.getText('PROFILE.WELCOME_BACK').replace('{name}', userName)}</h3></div>
+            <div class="profile-detail-row"><span>${CONFIG.getText('PROFILE.PROFILE_USERNAME')}</span><strong>${userName}</strong></div>
+            <div class="profile-detail-row"><span>${CONFIG.getText('PROFILE.PROFILE_USER_ID')}</span><strong>${profile.robloxId || 'unknown'}</strong></div>
+            <div class="profile-detail-row"><span>${CONFIG.getText('PROFILE.PROFILE_SESSION')}</span><strong>${profile.token ? profile.token.substring(0, 16) + '...' : 'n/a'}</strong></div>
+        </div>
+    `;
+    loginButton.style.display = 'none';
+    logoutButton.style.display = 'inline-flex';
+}
+
+function loadTradeOffers() {
+    try {
+        return JSON.parse(localStorage.getItem('fntd2_trade_offers') || '[]');
+    } catch (err) {
+        return [];
+    }
+}
+
+function saveTradeOffers(offers) {
+    localStorage.setItem('fntd2_trade_offers', JSON.stringify(offers));
+}
+
+function populateTradeUnitSelect() {
+    const select = document.getElementById('trade-unit-select');
+    if (!select) return;
+    select.innerHTML = DB_UNITS.map(unit => `<option value="${unit.id}">${unit.name} (${unit.id})</option>`).join('');
+}
+
+function updateTradingAuthUI() {
+    const profile = getSavedProfile();
+    const warning = document.getElementById('trade-auth-warning');
+    const createButton = document.getElementById('trade-submit-button');
+    const offerButton = document.getElementById('trade-add-offer-unit-button');
+    const wantButton = document.getElementById('trade-add-want-unit-button');
+    const tradeWrapper = document.getElementById('trade-form-wrapper');
+    if (!warning) return;
+    if (!profile) {
+        warning.className = 'trade-notice-card warning';
+        warning.textContent = CONFIG.getText('TRADING.LOGIN_PROMPT');
+        if (createButton) createButton.disabled = true;
+        if (offerButton) offerButton.disabled = true;
+        if (wantButton) wantButton.disabled = true;
+        if (tradeWrapper) {
+            tradeWrapper.style.pointerEvents = 'none';
+            tradeWrapper.style.opacity = '0.6';
+        }
+        return;
+    }
+    warning.className = 'trade-notice-card success';
+    warning.textContent = `${profile.robloxName || 'Roblox User'} is logged in.`;
+    if (createButton) createButton.disabled = false;
+    if (offerButton) offerButton.disabled = false;
+    if (wantButton) wantButton.disabled = false;
+    if (tradeWrapper) {
+        tradeWrapper.style.pointerEvents = 'auto';
+        tradeWrapper.style.opacity = '1';
+    }
+}
+
+function formatTradeUnitList(units) {
+    if (!units || !units.length) {
+        return `<div class="trade-empty-state">${CONFIG.getText('TRADING.NO_UNITS_SELECTED')}</div>`;
+    }
+    return units.map(unit => `
+        <div class="trade-unit-chip">
+            ${unit.name}
+        </div>
+    `).join('');
+}
+
+function renderTradeOfferCard(offer, index, profile) {
+    const canDelete = profile && profile.robloxId === offer.ownerId;
+    const deleteButton = canDelete ? `<button class="action-btn-secondary small" onclick="removeTradeOffer(${index})">${CONFIG.getText('TRADING.OFFER_DELETE')}</button>` : '';
+    const offerUnitsHtml = offer.offerUnits && offer.offerUnits.length
+        ? offer.offerUnits.map(unit => `<span class="trade-unit-chip">${unit.name}</span>`).join('')
+        : `<span class="trade-chip-empty">${CONFIG.getText('TRADING.NO_UNITS_SELECTED')}</span>`;
+    const wantUnitsHtml = offer.wantUnits && offer.wantUnits.length
+        ? offer.wantUnits.map(unit => `<span class="trade-unit-chip">${unit.name}</span>`).join('')
+        : `<span class="trade-chip-empty">${CONFIG.getText('TRADING.NO_UNITS_SELECTED')}</span>`;
+    return `
+        <div class="trade-offer-card">
+            <div class="trade-card-row"><strong>${CONFIG.getText('TRADING.OFFER_OWNER')}</strong><span>${offer.ownerName}</span></div>
+            <div class="trade-card-row"><strong>${CONFIG.getText('TRADING.OFFER_YOUR_OFFER')}</strong><span>${offerUnitsHtml}${offer.offerSouls ? `<div class="trade-souls-tag">+ ${offer.offerSouls} souls</div>` : ''}</span></div>
+            <div class="trade-card-row"><strong>${CONFIG.getText('TRADING.OFFER_THEIR_OFFER')}</strong><span>${wantUnitsHtml}${offer.wantSouls ? `<div class="trade-souls-tag">+ ${offer.wantSouls} souls</div>` : ''}</span></div>
+            <div class="trade-card-footer"><small>${new Date(offer.createdAt).toLocaleString()}</small>${deleteButton}</div>
+        </div>
+    `;
+}
+
+function renderTradeOffers() {
+    const globalOfferList = document.getElementById('trade-global-offers');
+    const yourOfferList = document.getElementById('trade-your-offers');
+    if (!globalOfferList || !yourOfferList) return;
+
+    const offers = loadTradeOffers();
+    const profile = getSavedProfile();
+
+    if (offers.length === 0) {
+        globalOfferList.innerHTML = `<div class="trade-empty-state">${CONFIG.getText('TRADING.NO_OFFERS')}</div>`;
+    } else {
+        globalOfferList.innerHTML = offers.map((offer, index) => renderTradeOfferCard(offer, index, profile)).join('');
+    }
+
+    const yourOffers = offers
+        .map((offer, index) => ({ offer, index }))
+        .filter(item => profile && item.offer.ownerId === profile.robloxId)
+        .map(item => renderTradeOfferCard(item.offer, item.index, profile));
+
+    yourOfferList.innerHTML = yourOffers.length ? yourOffers.join('') : `<div class="trade-empty-state">${CONFIG.getText('TRADING.NO_OFFERS')}</div>`;
+}
+
+function removeTradeOffer(index) {
+    const profile = getSavedProfile();
+    const offers = loadTradeOffers();
+    const offer = offers[index];
+    if (!profile || !offer || offer.ownerId !== profile.robloxId) {
+        return;
+    }
+    offers.splice(index, 1);
+    saveTradeOffers(offers);
+    renderTradeOffers();
+}
+
+function createTradeOffer() {
+    const profile = getSavedProfile();
+    if (!profile) {
+        alert(CONFIG.getText('TRADING.TRADE_CREATION_ERROR'));
+        return;
+    }
+
+    if (!tradeOfferUnits.length && !tradeWantUnits.length) {
+        alert(CONFIG.getText('TRADING.TRADE_CREATION_ERROR'));
+        return;
+    }
+
+    const offerSouls = parseInt(document.getElementById('trade-offer-souls')?.value, 10) || 0;
+    const wantSouls = parseInt(document.getElementById('trade-want-souls')?.value, 10) || 0;
+
+    const newOffer = {
+        offerUnits: tradeOfferUnits.map(unit => ({ id: unit.id, name: unit.name })),
+        wantUnits: tradeWantUnits.map(unit => ({ id: unit.id, name: unit.name })),
+        offerSouls,
+        wantSouls,
+        ownerId: profile.robloxId,
+        ownerName: profile.robloxName,
+        createdAt: new Date().toISOString(),
+    };
+
+    const offers = loadTradeOffers();
+    offers.unshift(newOffer);
+    saveTradeOffers(offers);
+    renderTradeOffers();
+    resetTradeCreateForm();
+    alert(CONFIG.getText('TRADING.TRADE_CREATED'));
+
+    const apiUrl = CONFIG.LINKS.TRADE_API_URL;
+    if (apiUrl && apiUrl.includes('http')) {
+        fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${profile.token}`,
+            },
+            body: JSON.stringify(newOffer),
+        }).catch(() => {
+            // Leave local store as fallback if API call is unavailable.
+        });
+    }
+}
+
+function initProfileAndTrading() {
+    parseAuthRedirect();
+    renderProfileState();
+    renderTradeCreateSelections();
+    updateTradingAuthUI();
+    renderTradeOffers();
 }
 
  
@@ -185,6 +694,19 @@ function buildFilterCheckboxLayouts() {
     if (builderSubclassFilter) {
         ALL_SUBCLASSES.forEach(s => {
             builderSubclassFilter.innerHTML += `<option value="${s}">${s}</option>`;
+        });
+    }
+
+    const selectorClassFilter = document.getElementById('team-selector-class-filter');
+    if (selectorClassFilter) {
+        ALL_CLASSES.forEach(c => {
+            selectorClassFilter.innerHTML += `<option value="${c}">${c}</option>`;
+        });
+    }
+    const selectorSubclassFilter = document.getElementById('team-selector-subclass-filter');
+    if (selectorSubclassFilter) {
+        ALL_SUBCLASSES.forEach(s => {
+            selectorSubclassFilter.innerHTML += `<option value="${s}">${s}</option>`;
         });
     }
 
@@ -250,7 +772,7 @@ function renderGridContainer(units, containerId) {
 
     units.forEach(unit => {
         const card = document.createElement('div');
-        card.className = 'unit-card-square animate-pop';
+        card.className = 'unit-card-square animate-pop rarity-' + (unit.rarity || '').replace(/\s+/g,'-');
         
         const rarityMeta = DB_RARITIES[unit.rarity];
         if (rarityMeta && rarityMeta.color.includes('gradient')) {
@@ -600,8 +1122,10 @@ function generateCreatorSquad() {
 
     let subsetPool = DB_UNITS.filter(u => checkedClasses.includes(u.class) && u.subclasses.some(s => checkedSubclasses.includes(s)));
     if (subsetPool.length === 0) {
-        currentTeam = [];
+        clearTeamSlots();
         renderGridContainer([], 'generator-grid-container');
+        renderTeamSlotGrid();
+        renderManualBuilderPool();
         updateTeamRatingPanel();
         return;
     }
@@ -624,31 +1148,50 @@ function generateCreatorSquad() {
         compiledSquad.push(remaining[Math.floor(Math.random() * remaining.length)]);
     }
 
-    currentTeam = compiledSquad;
+    teamSlots = compiledSquad.concat(Array(6 - compiledSquad.length).fill(null));
+    syncCurrentTeamWithSlots();
     renderGridContainer(currentTeam, 'generator-grid-container');
+    renderTeamSlotGrid();
     renderManualBuilderPool();
     updateTeamRatingPanel();
 }
 
-function addTeamMember(unitId) {
-    if (currentTeam.length >= CONFIG.GAME_BALANCE.TEAM.MAX_SIZE) return;
-    const existing = currentTeam.some(item => item.id === unitId);
-    if (existing) return;
+function addTeamMember(unitId, slotIndex = null) {
+    if (getActiveTeam().length >= CONFIG.GAME_BALANCE.TEAM.MAX_SIZE) return;
+    const existingIndex = teamSlots.findIndex(slot => slot?.id === unitId);
+    if (existingIndex !== -1) return;
     const unit = DB_UNITS.find(u => u.id === unitId);
     if (!unit) return;
-    currentTeam.push(unit);
+
+    if (slotIndex === null) {
+        slotIndex = teamSlots.findIndex(slot => !slot);
+    }
+    if (slotIndex === -1) return;
+
+    teamSlots[slotIndex] = unit;
+    syncCurrentTeamWithSlots();
+    renderGridContainer(currentTeam, 'generator-grid-container');
+    renderTeamSlotGrid();
     renderManualBuilderPool();
     updateTeamRatingPanel();
 }
 
 function removeTeamMember(unitId) {
-    currentTeam = currentTeam.filter(u => u.id !== unitId);
+    const slotIndex = teamSlots.findIndex(slot => slot?.id === unitId);
+    if (slotIndex !== -1) {
+        teamSlots[slotIndex] = null;
+    }
+    syncCurrentTeamWithSlots();
+    renderGridContainer(currentTeam, 'generator-grid-container');
+    renderTeamSlotGrid();
     renderManualBuilderPool();
     updateTeamRatingPanel();
 }
 
 function clearCurrentTeam() {
-    currentTeam = [];
+    clearTeamSlots();
+    renderGridContainer([], 'generator-grid-container');
+    renderTeamSlotGrid();
     renderManualBuilderPool();
     updateTeamRatingPanel();
 }
@@ -662,7 +1205,7 @@ function renderManualBuilderPool() {
     const subclassFilter = document.getElementById('team-builder-subclass-filter')?.value || 'All';
 
     const availableUnits = DB_UNITS.filter(unit => {
-        const isSelected = currentTeam.some(member => member.id === unit.id);
+        const isSelected = teamSlots.some(slot => slot?.id === unit.id);
         const matchSearch = unit.name.toLowerCase().includes(searchTerm) || unit.id.toLowerCase().includes(searchTerm);
         const matchClass = classFilter === 'All' || unit.class === classFilter;
         const matchSubclass = subclassFilter === 'All' || unit.subclasses.includes(subclassFilter);
@@ -677,7 +1220,7 @@ function renderManualBuilderPool() {
 
     availableUnits.forEach(unit => {
         const card = document.createElement('div');
-        card.className = 'unit-card-square animate-pop';
+        card.className = 'unit-card-square animate-pop rarity-' + (unit.rarity || '').replace(/\s+/g,'-');
         const rarityMeta = DB_RARITIES[unit.rarity];
         if (unit.image) card.style.backgroundImage = `url('${unit.image}')`;
         if (rarityMeta && rarityMeta.color.includes('gradient')) {
@@ -703,7 +1246,8 @@ function updateTeamRatingPanel() {
     const issuesNode = document.getElementById('team-rating-issues');
     const teamGrid = document.getElementById('team-rating-team-grid');
 
-    if (!currentTeam || currentTeam.length === 0) {
+    const activeTeam = getActiveTeam();
+    if (!activeTeam.length) {
         overviewNode.innerHTML = `<p>${CONFIG.getText('GENERATOR.RATING_EMPTY')}</p>`;
         detailsNode.innerHTML = '';
         issuesNode.innerHTML = '';
@@ -712,9 +1256,9 @@ function updateTeamRatingPanel() {
     }
 
     teamGrid.innerHTML = '';
-    currentTeam.forEach(unit => {
+    activeTeam.forEach(unit => {
         const card = document.createElement('div');
-        card.className = 'unit-card-square animate-pop';
+        card.className = 'unit-card-square animate-pop rarity-' + (unit.rarity || '').replace(/\s+/g,'-');
         const rarityMeta = DB_RARITIES[unit.rarity];
         if (unit.image) card.style.backgroundImage = `url('${unit.image}')`;
         if (rarityMeta && rarityMeta.color.includes('gradient')) {
@@ -742,13 +1286,14 @@ function updateTeamRatingPanel() {
         teamGrid.appendChild(card);
     });
 
-    const summary = getTeamRating(currentTeam);
+    const summary = getTeamRating(activeTeam);
+    if (teamGrid) teamGrid.innerHTML = '';
     overviewNode.innerHTML = `
         <div class="rating-heading">${summary.label}</div>
         <div class="rating-score">${summary.score}/5</div>
     `;
     detailsNode.innerHTML = `
-        <div class="rating-detail-row"><span>Team Size:</span><span>${currentTeam.length}/6</span></div>
+        <div class="rating-detail-row"><span>Team Size:</span><span>${activeTeam.length}/6</span></div>
         <div class="rating-detail-row"><span>Class Coverage:</span><span>${summary.coverageText}</span></div>
         <div class="rating-detail-row"><span>Synergy Variety:</span><span>${summary.synergyText}</span></div>
         <div class="rating-detail-row"><span>Budget Estimate:</span><span>$${summary.totalCost}</span></div>
@@ -757,11 +1302,12 @@ function updateTeamRatingPanel() {
 }
 
 function getTeamRating(team) {
-    const classes = [...new Set(team.map(u => u.class))];
+    const normalizedTeam = team.filter(Boolean);
+    const classes = [...new Set(normalizedTeam.map(u => u.class))];
     const synergies = {};
     let totalCost = 0;
 
-    team.forEach(u => {
+    normalizedTeam.forEach(u => {
         totalCost += parseInt(u.placementCost, 10) || 0;
         synergies[u.synergy] = (synergies[u.synergy] || 0) + 1;
     });
@@ -770,11 +1316,11 @@ function getTeamRating(team) {
     const synergyCount = Object.keys(synergies).length;
 
     let score = 0;
-    if (team.length >= 5) score += 2;
-    else if (team.length >= 4) score += 1;
+    if (normalizedTeam.length >= 5) score += 2;
+    else if (normalizedTeam.length >= 4) score += 1;
     if (missingClasses.length === 0) score += 1;
     if (synergyCount >= 3) score += 1;
-    if (totalCost <= (18 * team.length)) score += 1;
+    if (totalCost <= (18 * normalizedTeam.length)) score += 1;
 
     const label = score >= 4 ? 'Strong Team' : score === 3 ? 'Balanced Team' : 'Needs Work';
     const coverageText = classes.length > 0 ? classes.join(', ') : 'None';
