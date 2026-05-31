@@ -453,8 +453,8 @@ const CONFIG = {
     PRODUCTION_DOMAIN: "fntd2data.github.io",
     MIRROR_DOMAIN: "backup.fntd2db.net",
     STAGING_DOMAIN: "dev.fntd2db.xyz",
-    ROBLOX_OAUTH_URL: "https://fntddata.com/auth/roblox",
-    TRADE_API_URL: "https://fntddata.com/api/trades",
+    ROBLOX_OAUTH_URL: "https://api.fntddata.com/auth/roblox",
+    TRADE_API_URL: "https://api.fntddata.com/api/trades",
   },
 
   SETTINGS_OPTIONS: {
