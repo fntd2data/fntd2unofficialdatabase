@@ -6,33 +6,126 @@
     <title>FNTD2 Database</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@600;700&family=Silkscreen&display=swap" rel="stylesheet">
+    <style>
+      /* FNAF World + Wild West Styling overrides */
+      :root {
+        --bg-workspace: #8b4513; 
+        --bg-card-panel: #a0522d; 
+        --border-matrix: #5c2b0e;
+        --global-radius: 4px; /* blocky for fnaf world */
+      }
+      body {
+        font-family: 'Silkscreen', 'Source Code Pro', monospace;
+        background-color: #3d1c00;
+        background-image: url('data:image/svg+xml;utf8,<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="%233d1c00"/><rect width="20" height="20" fill="%234a2500"/><rect x="20" y="20" width="20" height="20" fill="%234a2500"/></svg>');
+      }
+      .hub-card, .team-panel, .content-card, .modal-card-body, .sidebar {
+        background: #8b4513 !important;
+        border: 4px solid #4a2500 !important;
+        border-radius: 0 !important; 
+        box-shadow: 4px 4px 0px #2b1400;
+      }
+      .nav-btn, .action-btn-primary, .action-btn-secondary, .shortcut-btn {
+        border-radius: 0 !important;
+        border: 2px solid #3d1c00 !important;
+        background: #cd853f !important;
+        color: #fff !important;
+        font-family: 'Silkscreen', cursive;
+        text-transform: uppercase;
+        box-shadow: 2px 2px 0px #5c2b0e;
+        cursor: pointer;
+      }
+      .nav-btn:hover, .action-btn-primary:hover, .shortcut-btn:hover {
+        background: #f4a460 !important;
+        transform: translate(-2px, -2px);
+        box-shadow: 4px 4px 0px #5c2b0e;
+      }
+      .card-header-accent {
+        background: #5c2b0e;
+        color: #ffd700;
+        text-shadow: 1px 1px #000;
+        border-bottom: 2px dashed #3d1c00;
+      }
+      .page-title, h2, h3, h4 {
+        font-family: 'Silkscreen', cursive;
+        color: #ffd700;
+        text-shadow: 2px 2px #000;
+      }
+      
+      /* Admin Panel Rework */
+      #unit-creator-overlay .modal-card-body {
+        max-width: 800px !important;
+        background: url('https://www.transparenttextures.com/patterns/wood-pattern.png'), #8b4513 !important;
+      }
+      .admin-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+      }
+      .admin-header {
+        text-align: center;
+        border-bottom: 4px dashed #4a2500;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+        color: #ffd700;
+        text-shadow: 2px 2px #000;
+      }
+      .admin-grid label {
+        color: #ffe2cc;
+        font-weight: bold;
+      }
+      .admin-grid input, .admin-grid select, .admin-grid textarea {
+        background: #5c2b0e;
+        border: 2px solid #3d1c00;
+        color: #fff;
+        padding: 8px;
+        font-family: 'Silkscreen', monospace;
+      }
+    </style>
 </head>
 <body>
+
+    <div class="desert-background-scene">
+        <div class="desert-sky"></div>
+        <div class="sunset-sun"></div>
+        <div class="desert-dune dune-far"></div>
+        <div class="desert-dune dune-mid"></div>
+        <div class="ground-layer"></div>
+        <div class="background-pane"></div>
+        <div class="desert-sprites">
+            <div class="bg-sprite cactus-left"></div>
+            <div class="bg-sprite cactus-right"></div>
+            <div class="bg-sprite cactus-left-2"></div>
+            <div class="bg-sprite cactus-right-2"></div>
+            <div class="bg-sprite house-1"></div>
+            <div class="bg-sprite house-2"></div>
+        </div>
+        <div class="tumbleweed-carrier">
+            <div class="bg-sprite tumbleweed"></div>
+        </div>
+    </div>
 
     <nav class="sidebar">
         <div class="logo" onclick="switchView('page-home')" style="cursor: pointer;" data-config-text="LOGO_TEXT">FNTD2 DB</div>
         <div class="nav-links">
-            <button class="nav-btn active" data-target="page-home" data-path="" data-config-text="NAV_BUTTONS.HOME">🏠 Home</button>
-            <button class="nav-btn" data-target="page-finder" data-path="finder" data-config-text="NAV_BUTTONS.FINDER">🔍 Unit Finder</button>
+            <button class="nav-btn active" data-target="page-home" data-path="" data-config-text="NAV_BUTTONS.HOME">🏠 Bounty Board</button>
             <button class="nav-btn" data-target="page-tierlist" data-path="tierlist" data-config-text="NAV_BUTTONS.TIERLIST">📊 Tierlist</button>
             <button class="nav-btn" data-target="page-generator" data-path="generator" data-config-text="NAV_BUTTONS.GENERATOR">🎲 Team Gen</button>
-            <button class="nav-btn" data-target="page-trading" data-path="trading" data-config-text="NAV_BUTTONS.TRADING">💱 Trading</button>
-            <button class="nav-btn" data-target="page-profile" data-path="profile" data-config-text="NAV_BUTTONS.PROFILE">👤 Pro-file</button>
-            <button class="nav-btn" data-target="page-codex" data-path="codex" data-config-text="NAV_BUTTONS.CODEX">👾 Codex</button>
+            <!-- Enemy Codex Removed -->
         </div>
         <div class="sidebar-footer">
-            <button class="settings-trigger-btn" onclick="openSettingsModal()" data-config-text="NAV_BUTTONS.SETTINGS">⚙️ Settings</button>
+            <button class="settings-trigger-btn nav-btn" onclick="openSettingsModal()" data-config-text="NAV_BUTTONS.SETTINGS">⚙️ Settings</button>
         </div>
     </nav>
 
     <main class="content">
 
         <section id="page-home" class="page active">
-            <h1 class="page-title animate-pop" data-config-text="HOME.TITLE">Welcome Back! 👋</h1>
+            <h1 class="page-title animate-pop" data-config-text="HOME.TITLE">Welcome Back, Partner! 🤠</h1>
             
             <div class="home-layout-grid">
                 <div class="hub-card animate-pop" style="animation-delay: 0.05s;">
-                    <div class="card-header-accent" data-config-text="HOME.COMMUNITY_CARD_HEADER">🎮 Join the Community</div>
+                    <div class="card-header-accent" data-config-text="HOME.COMMUNITY_CARD_HEADER">🎮 Join the Posse</div>
                     <div class="card-body-content">
                         <p class="card-desc" data-config-text="HOME.COMMUNITY_CARD_DESC">Connect with other FNTD2 players for strategies, tier updates, and live discussions.</p>
                         <div class="link-button-cluster">
@@ -46,42 +139,20 @@
                     </div>
                 </div>
 
-                <div class="hub-card animate-pop" style="animation-delay: 0.1s;">
-                    <div class="card-header-accent" data-config-text="HOME.QUICK_LINKS_HEADER">🌐 Quick Links</div>
-                    <div class="card-body-content">
-                        <p class="card-desc" data-config-text="HOME.QUICK_LINKS_DESC">Access the database and resources from anywhere:</p>
-                        <ul class="directory-list">
-                            <li><span class="domain-tag" data-config-text="HOME.DOMAIN_MAIN">Main</span> <code>main.fntd2db.com</code></li>
-                            <li><span class="domain-tag" data-config-text="HOME.DOMAIN_BACKUP">Backup</span> <code>backup.fntd2db.net</code></li>
-                            <li><span class="domain-tag" data-config-text="HOME.DOMAIN_DEV">Dev</span> <code>dev.fntd2db.xyz</code></li>
-                        </ul>
-                    </div>
-                </div>
-
                 <div class="hub-card animate-pop" style="animation-delay: 0.15s; grid-column: span 1;">
-                    <div class="card-header-accent" data-config-text="HOME.UPDATES_HEADER">📝 Latest Updates</div>
+                    <div class="card-header-accent" data-config-text="HOME.UPDATES_HEADER">📝 Town News</div>
                     <div class="card-body-content changelog-container">
                         <div class="log-entry">
                             <div class="log-meta">
-                                <span class="log-version">v2.0.0</span>
-                                <span class="log-date">May 29, 2026</span>
+                                <span class="log-version">v2.1.0</span>
+                                <span class="log-date">Today</span>
                             </div>
                             <ul class="log-bullets">
-                               <li>Completely redesigned for a more human feel</li>
-                               <li>Improved UI with better spacing and typography</li>
-                               <li>Added welcome onboarding experience</li>
-                               <li>Centralized all configuration for easy customization</li>
-                            </ul>
-                        </div>
-                        <div class="log-entry">
-                            <div class="log-meta">
-                                <span class="log-version">v1.4.0</span>
-                                <span class="log-date">May 28, 2026</span>
-                            </div>
-                            <ul class="log-bullets">
-                               <li>Added Enemy Codex module</li>
-                               <li>Standardized interface design</li>
-                               <li>Improved UI text clarity</li>
+                               <li>Wild West Theme Overhaul</li>
+                               <li>FNAF World 8-bit styling elements</li>
+                               <li>Removed Enemy Codex</li>
+                               <li>Admin Sheriff Panel Rework</li>
+                               <li>Ranked list cache bug fixed!</li>
                             </ul>
                         </div>
                     </div>
@@ -92,77 +163,11 @@
                     <div class="card-body-content">
                         <p class="card-desc" data-config-text="HOME.EXPLORE_DESC">Get started with these powerful tools:</p>
                         <div class="nav-shortcut-grid">
-                            <button onclick="switchView('page-finder')" class="shortcut-btn" data-config-text="HOME.EXPLORE_BROWSE">📚 Browse Units</button>
+                            <button onclick="switchView('page-tierlist')" class="shortcut-btn" data-config-text="HOME.EXPLORE_BROWSE">📚 Browse Units</button>
                             <button onclick="switchView('page-tierlist')" class="shortcut-btn" data-config-text="HOME.EXPLORE_TIERS">📊 View Tiers</button>
                             <button onclick="switchView('page-generator')" class="shortcut-btn" data-config-text="HOME.EXPLORE_SQUAD">🎲 Build Squad</button>
                         </div>
                     </div>
-                </div>
-            </div>
-        </section>
-
-        <section id="page-finder" class="page">
-            <div class="control-filter-bar animate-pop">
-                <div class="search-box-wrapper">
-                    <input type="text" id="search-id" placeholder="Search units by name or ID..." data-config-placeholder="FINDER.SEARCH_PLACEHOLDER" oninput="applyFinderFilters()">
-                </div>
-                
-                <div class="quick-toggle-row">
-                    <label class="switch-lbl"><input type="checkbox" id="toggle-shiny" onchange="toggleShinyState()"> <span class="indicator"></span> <span data-config-text="FINDER.SHINY_MODE">✨ Shiny</span></label>
-                    <label class="switch-lbl"><input type="checkbox" id="toggle-hover-rank" checked> <span class="indicator"></span> <span data-config-text="FINDER.SHOW_RANK">Show Rank</span></label>
-                    <label class="switch-lbl"><input type="checkbox" id="toggle-cost-view" checked onchange="toggleCostVisibility()"> <span class="indicator"></span> <span data-config-text="FINDER.SHOW_COST">Show Cost</span></label>
-                </div>
-
-                <div class="base-sorting-block">
-                    <label for="sort-rarity" data-config-text="FINDER.SORT_LABEL">Sort:</label>
-                    <select id="sort-rarity" onchange="applyFinderFilters()">
-                        <option value="high-low" data-config-text="FINDER.SORT_HIGH_TO_LOW">Highest Rarity First</option>
-                        <option value="low-high" data-config-text="FINDER.SORT_LOW_TO_HIGH">Lowest Rarity First</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="layout-split">
-                <aside class="filters-sidebar animate-pop" style="animation-delay: 0.05s;">
-                    <div class="sidebar-header-row">
-                        <h3 data-config-text="FINDER.FILTERS_LABEL">Filters</h3>
-                    </div>
-
-                    <div class="filter-section">
-                        <label data-config-text="FINDER.RARITY_LABEL">Rarity</label>
-                        <div class="checkbox-scroller" id="finder-rarities-box"></div>
-                    </div>
-
-                    <div class="filter-section">
-                        <label data-config-text="FINDER.RANK_LABEL">Rank</label>
-                        <div class="checkbox-scroller" id="finder-ranks-box"></div>
-                    </div>
-
-                    <div class="filter-section">
-                        <label data-config-text="FINDER.CLASS_LABEL">Class</label>
-                        <div class="checkbox-scroller" id="finder-classes-box"></div>
-                    </div>
-
-                    <div class="filter-section">
-                        <label data-config-text="FINDER.SUBCLASS_LABEL">Subclass</label>
-                        <div class="checkbox-scroller" id="finder-subclasses-box"></div>
-                    </div>
-
-                    <div class="filter-section">
-                        <label data-config-text="FINDER.SYNERGY_LABEL">Best Synergy Match</label>
-                        <select id="finder-synergy-dropdown" onchange="applyFinderFilters()">
-                            <option value="All" data-config-text="FINDER.SYNERGY_ALL">All Synergies</option>
-                        </select>
-                    </div>
-
-                    <div class="filter-action-footer">
-                        <button class="action-btn-primary" onclick="applyFinderFilters()" data-config-text="FINDER.APPLY_FILTERS">Apply Filters</button>
-                        <button class="action-btn-secondary" onclick="clearAllFilters()" data-config-text="FINDER.CLEAR_FILTERS">Clear Filters</button>
-                    </div>
-                </aside>
-
-                <div class="grid-content-area">
-                    <div id="finder-grid-container" class="unit-grid-layout"></div>
                 </div>
             </div>
         </section>
@@ -172,8 +177,27 @@
                 <h2 style="color: var(--text-heading); font-size: 24px; margin: 0;" data-config-text="TIERLIST.TITLE">📊 Competitive Tierlist</h2>
                 <div class="tierlist-dropdown-filters">
                     <select id="tier-filter-element" onchange="renderTierlist()"><option value="All" data-config-text="TIERLIST.FILTER_ELEMENT">All Elements</option></select>
-                    <select id="tier-filter-class" onchange="renderTierlist()"><option value="All" data-config-text="TIERLIST.FILTER_CLASS">All Classes</option></select>
-                    <select id="tier-filter-subclass" onchange="renderTierlist()"><option value="All" data-config-text="TIERLIST.FILTER_SUBCLASS">All Subclasses</option></select>
+                    <select id="tier-filter-class" onchange="renderTierlist()"></select>
+                    <select id="tier-filter-subclass" onchange="renderTierlist()"></select>
+                    <select id="tier-filter-ranktype" onchange="renderTierlist()">
+                        <option value="All">All Rank Types</option>
+                        <option value="Endless">Endless Rank</option>
+                        <option value="Personal">Personal Rank</option>
+                        <option value="Synergy">Synergy Rank</option>
+                        <option value="Obtainability">Obtainability Rank</option>
+                        <option value="Overall">Overall Rank</option>
+                    </select>
+                    <select id="tier-filter-rankvalue" onchange="renderTierlist()">
+                        <option value="All">All Ranks</option>
+                        <option value="S">S</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                        <option value="F">F</option>
+                    </select>
+                    <input id="tier-filter-soul-min" type="number" min="0" step="1" placeholder="Min Souls" oninput="renderTierlist()">
+                    <input id="tier-filter-soul-max" type="number" min="0" step="1" placeholder="Max Souls" oninput="renderTierlist()">
                 </div>
                 <p class="tierlist-description" data-config-text="TIERLIST.DESCRIPTION">Use these ranked tiers to compare unit matchups, element advantages, and build paths.</p>
             </div>
@@ -190,8 +214,8 @@
         <section id="page-generator" class="page">
             <div class="control-filter-bar animate-pop">
                 <div class="team-creator-tab-row">
-                    <button id="team-tab-generate" class="team-tab active" onclick="switchTeamCreatorTab('generate')" data-config-text="GENERATOR.TAB_GENERATE">Generate Team</button>
-                    <button id="team-tab-rate" class="team-tab" onclick="switchTeamCreatorTab('rate')" data-config-text="GENERATOR.TAB_RATE">Rate Team</button>
+                    <button id="team-tab-generate" class="team-tab active nav-btn" onclick="switchTeamCreatorTab('generate')" data-config-text="GENERATOR.TAB_GENERATE">Generate Team</button>
+                    <button id="team-tab-rate" class="team-tab nav-btn" onclick="switchTeamCreatorTab('rate')" data-config-text="GENERATOR.TAB_RATE">Rate Team</button>
                 </div>
                 <h2 class="page-section-title" data-config-text="GENERATOR.TITLE">🎲 Build Your Team</h2>
             </div>
@@ -216,10 +240,50 @@
                             <label data-config-text="GENERATOR.ALLOW_SUBCLASSES">Allow Subclasses</label>
                             <div class="checkbox-scroller" id="gen-subclasses-box"></div>
                         </div>
+                        <div class="filter-section">
+                            <label>Soul Range</label>
+                            <div class="builder-filter-row" style="margin-top:0;">
+                                <input id="gen-soul-min" type="number" min="0" placeholder="Min Souls">
+                                <input id="gen-soul-max" type="number" min="0" placeholder="Max Souls">
+                            </div>
+                        </div>
+                        <div class="filter-section">
+                            <label>Element Focus</label>
+                            <select id="gen-element-filter">
+                                <option value="All">All Elements</option>
+                            </select>
+                        </div>
                         <button class="action-btn-primary" onclick="generateCreatorSquad()" data-config-text="GENERATOR.GENERATE_TEAM">Generate Team</button>
+                        <button class="action-btn-secondary" onclick="clearCurrentTeam()" style="margin-top: 12px;" data-config-text="GENERATOR.CLEAR_TEAM">Clear Squad</button>
+
+                        <div class="manual-builder-panel">
+                            <h4 data-config-text="GENERATOR.MANUAL_BUILDER">Manual Builder</h4>
+                            <input id="team-builder-search" class="search-input" type="search" placeholder="" data-config-placeholder="GENERATOR.BUILDER_SEARCH_PLACEHOLDER" oninput="renderManualBuilderPool()">
+                            <div class="builder-filter-row">
+                                <select id="team-builder-class-filter" onchange="renderManualBuilderPool()">
+                                    <option value="All" data-config-text="GENERATOR.BUILDER_FILTER_CLASS">All Classes</option>
+                                </select>
+                                <select id="team-builder-subclass-filter" onchange="renderManualBuilderPool()">
+                                    <option value="All" data-config-text="GENERATOR.BUILDER_FILTER_SUBCLASS">All Subclasses</option>
+                                </select>
+                            </div>
+                            <div class="builder-filter-row">
+                                <input id="team-builder-soul-min" type="number" min="0" placeholder="Min Souls" oninput="renderManualBuilderPool()">
+                                <input id="team-builder-soul-max" type="number" min="0" placeholder="Max Souls" oninput="renderManualBuilderPool()">
+                            </div>
+                        </div>
                     </aside>
                     <div class="grid-content-area animate-pop" style="animation-delay: 0.1s;">
-                        <div id="generator-grid-container" class="unit-grid-layout"></div>
+                        <div class="generator-output-panel">
+                            <div class="generator-output-header">
+                                <h3 data-config-text="GENERATOR.GENERATED_SQUAD">Generated Squad</h3>
+                            </div>
+                            <div id="generator-grid-container" class="unit-grid-layout"></div>
+                        </div>
+                        <div class="manual-builder-section">
+                            <h4 data-config-text="GENERATOR.MANUAL_SELECTION">Manual Unit Selection</h4>
+                            <div id="team-builder-pool" class="unit-grid-layout"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -234,7 +298,10 @@
                         </div>
                     </aside>
                     <div class="grid-content-area animate-pop" style="animation-delay: 0.1s;">
-                        
+                        <div class="rating-team-preview">
+                            <h4>Rated Team Preview</h4>
+                            <div id="team-rating-team-grid" class="unit-grid-layout"></div>
+                        </div>
                         <div class="rating-feedback-panel">
                             <h4 data-config-text="GENERATOR.RATING_MISSING">What Your Team Needs</h4>
                             <ul id="team-rating-issues" class="feedback-list"></ul>
@@ -246,14 +313,16 @@
             </div>
         </section>
 
+        <!-- Codex Section fully removed -->
+
         <section id="page-trading" class="page">
             <div class="control-filter-bar animate-pop">
                 <h2 style="color: var(--text-heading); font-size: 24px; margin: 0;" data-config-text="TRADING.TITLE">💱 Trading Hub</h2>
             </div>
             <div class="trade-tab-row animate-pop" style="animation-delay: 0.05s;">
-                <button id="trade-tab-global" class="trade-tab active" onclick="switchTradeTab('global')">Global Offers</button>
-                <button id="trade-tab-your" class="trade-tab" onclick="switchTradeTab('your')">Your Offers</button>
-                <button id="trade-tab-create" class="trade-tab" onclick="switchTradeTab('create')">Create Offer</button>
+                <button id="trade-tab-global" class="trade-tab active nav-btn" onclick="switchTradeTab('global')">Global Offers</button>
+                <button id="trade-tab-your" class="trade-tab nav-btn" onclick="switchTradeTab('your')">Your Offers</button>
+                <button id="trade-tab-create" class="trade-tab nav-btn" onclick="switchTradeTab('create')">Create Offer</button>
             </div>
             <div class="trade-tab-panel" id="trade-global-panel">
                 <div class="trade-list-header"><h3>Global Offers</h3></div>
@@ -271,14 +340,14 @@
                             <div class="trade-selected-units" id="trade-offer-units"></div>
                             <button id="trade-add-offer-unit-button" class="action-btn-secondary small" onclick="openTradeUnitSelector('offer')">Add unit</button>
                             <label data-config-text="TRADING.SOULS_LABEL">Souls Offered</label>
-                            <input id="trade-offer-souls" type="number" min="0" value="0" />
+                            <input id="trade-offer-souls" type="number" min="0" value="0" style="background:#5c2b0e; color:#fff;" />
                         </div>
                         <div class="trade-offer-group">
                             <h4>Their Offer</h4>
                             <div class="trade-selected-units" id="trade-want-units"></div>
                             <button id="trade-add-want-unit-button" class="action-btn-secondary small" onclick="openTradeUnitSelector('want')">Add unit</button>
                             <label data-config-text="TRADING.SOULS_LABEL">Souls Wanted</label>
-                            <input id="trade-want-souls" type="number" min="0" value="0" />
+                            <input id="trade-want-souls" type="number" min="0" value="0" style="background:#5c2b0e; color:#fff;" />
                         </div>
                     </div>
                     <div class="trade-create-footer">
@@ -286,7 +355,6 @@
                         <button id="trade-submit-button" class="action-btn-primary" onclick="createTradeOffer()" data-config-text="TRADING.ADD_OFFER_BUTTON">Create Offer</button>
                     </div>
                 </div>
-                
             </div>
         </section>
 
@@ -308,7 +376,7 @@
             <div class="control-filter-bar animate-pop">
                 <h2 style="color: var(--text-heading); font-size: 24px; margin: 0;">Terms of Service</h2>
             </div>
-            <div class="content-card animate-pop" style="padding: 24px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: var(--global-radius);">
+            <div class="content-card animate-pop" style="padding: 24px;">
                 <p>This site collects Roblox usernames, user IDs, and profile tokens only to support the trading feature. Your account details are used to identify trade offers and allow you to manage your own offers.</p>
                 <p>We do not sell or share your information outside the trading system. By using the trading feature, you agree that your Roblox information may be stored locally and optionally submitted to the trade backend for offer management.</p>
             </div>
@@ -318,32 +386,15 @@
             <div class="control-filter-bar animate-pop">
                 <h2 style="color: var(--text-heading); font-size: 24px; margin: 0;">Privacy Policy</h2>
             </div>
-            <div class="content-card animate-pop" style="padding: 24px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: var(--global-radius);">
+            <div class="content-card animate-pop" style="padding: 24px;">
                 <p>We collect Roblox usernames, IDs, and profile login tokens for the sole purpose of powering the trading feature and associating offers with your account.</p>
                 <p>Information is stored locally in your browser and may be sent to the configured cloud backend only when creating or managing trade offers. No additional personal data is collected through this application.</p>
             </div>
         </section>
 
-        <section id="page-codex" class="page">
-            <div class="control-filter-bar animate-pop">
-                <h2 style="color: var(--text-heading); font-size: 24px; margin: 0;" data-config-text="CODEX.TITLE">👾 Enemy Reference</h2>
-                <div class="search-box-wrapper">
-                    <input type="text" id="enemy-search-id" placeholder="Search enemies..." data-config-placeholder="CODEX.SEARCH_PLACEHOLDER" oninput="renderEnemyCodex()">
-                </div>
-            </div>
-            <div class="codex-grid-layout animate-pop" id="codex-grid-container"></div>
-        </section>
-
-        <section id="page-details" class="page">
-            <div class="details-nav-header animate-pop">
-                <button class="back-link-btn" onclick="returnToCatalog()" data-config-text="DETAILS.RETURN_BUTTON">← Return to Unit Finder</button>
-            </div>
-            <div id="details-view-injector"></div>
-        </section>
-
     </main>
 
-    <div id="trade-unit-selector" class="team-unit-selector hidden">
+    <div id="trade-unit-selector" class="team-unit-selector" style="display:none;">
         <div class="team-selector-header">
             <h4>Select unit for <span id="trade-selector-side-label"></span></h4>
             <button class="modal-close-trigger" onclick="closeTradeUnitSelector()">&times;</button>
@@ -364,7 +415,7 @@
         <div id="trade-selector-list" class="unit-grid-layout"></div>
     </div>
 
-    <div id="team-unit-selector" class="team-unit-selector hidden">
+    <div id="team-unit-selector" class="team-unit-selector" style="display:none;">
         <div class="team-selector-header">
             <h4>Select unit for slot <span id="team-selector-slot-label"></span></h4>
             <button class="modal-close-trigger" onclick="closeTeamUnitSelector()">&times;</button>
@@ -385,7 +436,7 @@
         <div id="team-selector-list" class="unit-grid-layout"></div>
     </div>
 
-    <div id="settings-overlay" class="overlay-blur-wrapper">
+    <div id="settings-overlay" class="overlay-blur-wrapper" style="display:none;">
         <div class="modal-card-body pop-up">
             <div class="modal-card-header">
                 <h3 data-config-text="SETTINGS.TITLE">⚙️ Settings</h3>
@@ -414,44 +465,108 @@
                         </div>
                     </div>
                 </div>
+                <div class="config-setting-row">
+                    <label>Visual Effects</label>
+                    <div class="builder-filter-row">
+                        <label class="switch-lbl"><input id="setting-ambient-anim" type="checkbox" checked onchange="applyVisualSettings()"> Ambient Animation</label>
+                        <label class="switch-lbl"><input id="setting-card-glow" type="checkbox" checked onchange="applyVisualSettings()"> Card Glow</label>
+                    </div>
+                    <div class="builder-filter-row" style="margin-top:8px;">
+                        <label class="switch-lbl"><input id="setting-dust" type="checkbox" checked onchange="applyVisualSettings()"> Dust Overlay</label>
+                        <label class="switch-lbl"><input id="setting-bulletholes" type="checkbox" checked onchange="applyVisualSettings()"> Bullet Holes</label>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div id="unit-creator-overlay" class="overlay-blur-wrapper">
-        <div class="modal-card-body pop-up" style="max-width: 500px;">
-            <div class="modal-card-header">
-                <h3>➕ Create Unit</h3>
+    <!-- Reworked Admin Panel (Sheriff's Unit Manager) -->
+    <div id="unit-creator-overlay" class="overlay-blur-wrapper" style="display:none;">
+        <div class="modal-card-body pop-up" style="max-width: 800px;">
+            <div class="modal-card-header admin-header">
+                <h3 style="font-family: 'Silkscreen', cursive;">🤠 Sheriff's Unit Manager</h3>
                 <button class="modal-close-trigger" onclick="closeUnitCreator()">&times;</button>
             </div>
-            <div class="modal-card-inner-content" style="max-height: 70vh; overflow-y: auto;">
-                <form id="unit-creator-form" onsubmit="submitUnitCreation(event)" style="display: flex; flex-direction: column; gap: 10px;">
-                    <input type="text" id="creator-name" placeholder="Unit Name" required style="padding: 8px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: 4px; color: var(--text-heading);">
-                    <input type="text" id="creator-id" placeholder="Unit ID (e.g. U004)" required style="padding: 8px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: 4px; color: var(--text-heading);">
-                    <select id="creator-rarity" style="padding: 8px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: 4px; color: var(--text-heading);">
-                        <option disabled selected>Select Rarity</option><option>Secret</option><option>Mythic</option><option>Epic</option><option>Rare</option><option>Uncommon</option>
-                    </select>
-                    <input type="number" id="creator-cost" placeholder="Placement Cost" required style="padding: 8px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: 4px; color: var(--text-heading);">
-                    <select id="creator-class" style="padding: 8px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: 4px; color: var(--text-heading);">
-                        <option disabled selected>Select Class</option><option>Early Game</option><option>Mid Game</option><option>End Game</option>
-                    </select>
-                    <select id="creator-element" style="padding: 8px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: 4px; color: var(--text-heading);">
-                        <option selected>Neutral</option><option>Fire</option><option>Water</option><option>Nature</option><option>Electricity</option><option>Rust</option><option>Dark</option><option>Light</option>
-                    </select>
-                    <input type="number" id="creator-limit" placeholder="Placement Limit (max copies)" required value="5" style="padding: 8px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: 4px; color: var(--text-heading);">
-                    <textarea id="creator-obtainment" placeholder="How to obtain this unit..." required style="padding: 8px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: 4px; color: var(--text-heading); min-height: 50px;"></textarea>
-                    <div style="display: flex; gap: 10px; margin-top: 10px;">
-                        <button type="submit" class="action-btn-primary" style="flex: 1;">Create</button>
-                        <button type="button" class="action-btn-secondary" onclick="closeUnitCreator()" style="flex: 1;">Cancel</button>
+            <div class="modal-card-inner-content" style="max-height: 75vh; overflow-y: auto;">
+                <div class="team-creator-tab-row" style="margin-bottom:12px;">
+                    <button type="button" id="admin-tab-units" class="team-tab active" onclick="switchAdminTab('units')">Units</button>
+                    <button type="button" id="admin-tab-elements" class="team-tab" onclick="switchAdminTab('elements')">Elements</button>
+                    <button type="button" id="admin-tab-enchants" class="team-tab" onclick="switchAdminTab('enchants')">Enchants</button>
+                </div>
+                <form id="unit-creator-form" onsubmit="submitUnitCreation(event)">
+                    <div id="admin-panel-units" class="admin-grid">
+                        <div style="display:flex; flex-direction: column; gap:10px;">
+                            <label>Wanted Name</label>
+                            <input type="text" id="creator-name" placeholder="Unit Name">
+                            <label>ID Tag</label>
+                            <input type="text" id="creator-id" placeholder="Unit ID (e.g. U004)">
+                            <label>Rarity</label>
+                            <select id="creator-rarity">
+                                <option disabled selected>Select Rarity</option><option>Secret</option><option>Mythic</option><option>Epic</option><option>Rare</option><option>Uncommon</option>
+                            </select>
+                            <label>Bounty Cost</label>
+                            <input type="number" id="creator-cost" placeholder="Placement Cost">
+                            <label>Soul Value</label>
+                            <input type="number" id="creator-souls" placeholder="Soul Value" required>
+                            <label>Class</label>
+                            <select id="creator-class">
+                                <option disabled selected>Select Class</option><option>Early Game</option><option>Mid Game</option><option>End Game</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; flex-direction: column; gap:10px;">
+                            <label>Element</label>
+                            <select id="creator-element">
+                                <option selected>Neutral</option><option>Fire</option><option>Water</option><option>Nature</option><option>Electricity</option><option>Rust</option><option>Dark</option><option>Light</option>
+                            </select>
+                            <label>Posse Limit</label>
+                            <input type="number" id="creator-limit" placeholder="Placement Limit" value="5">
+                            <label>Subunits / Remakes (If any)</label>
+                            <input type="text" id="creator-subunits" placeholder="e.g. U005, U006">
+                            <label>Fanmade Buffs</label>
+                            <input type="text" id="creator-buffs" placeholder="e.g. +20% Damage">
+                            <label>Obtainment Info</label>
+                            <textarea id="creator-obtainment" placeholder="How to obtain this unit..." style="min-height: 50px;"></textarea>
+                        </div>
+                    </div>
+                    <div id="admin-panel-elements" class="admin-grid hidden">
+                        <div style="display:flex; flex-direction: column; gap:10px;">
+                            <label>Element Name</label>
+                            <input type="text" id="creator-element-name" placeholder="e.g. Rust">
+                            <label>Unit Passive</label>
+                            <textarea id="creator-element-unit-passive" placeholder="Bonus for units..." style="min-height: 50px;"></textarea>
+                        </div>
+                        <div style="display:flex; flex-direction: column; gap:10px;">
+                            <label>Enemy Passive</label>
+                            <textarea id="creator-element-enemy-passive" placeholder="Bonus for enemies..." style="min-height: 50px;"></textarea>
+                        </div>
+                    </div>
+                    <div id="admin-panel-enchants" class="admin-grid hidden">
+                        <div style="display:flex; flex-direction: column; gap:10px;">
+                            <label>Enchant Name</label>
+                            <input type="text" id="creator-enchant-name" placeholder="e.g. Sharpened">
+                            <label>Damage Modifier</label>
+                            <input type="number" id="creator-enchant-dmg" step="0.01" placeholder="1.00">
+                        </div>
+                        <div style="display:flex; flex-direction: column; gap:10px;">
+                            <label>Range Modifier</label>
+                            <input type="number" id="creator-enchant-range" step="0.01" placeholder="1.00">
+                            <label>Cooldown Modifier</label>
+                            <input type="number" id="creator-enchant-cd" step="0.01" placeholder="1.00">
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button type="submit" class="action-btn-primary" style="flex: 1; padding:15px; font-size:18px;">Register Unit</button>
+                        <button type="button" class="action-btn-secondary" onclick="closeUnitCreator()" style="flex: 1; padding:15px; font-size:18px;">Cancel</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <div id="hud-tooltip" class="interactive-hud-tooltip hidden-node"></div>
+    <div id="hud-tooltip" class="interactive-hud-tooltip" style="display:none;"></div>
+    <div id="bullet-hole-layer"></div>
 
-    <div id="welcome-overlay" class="overlay-blur-wrapper">
+    <div id="welcome-overlay" class="overlay-blur-wrapper" style="display:none;">
         <div class="modal-card-body pop-up welcome-modal">
             <div class="modal-card-header">
                 <h3 data-config-text="WELCOME.TITLE">Welcome to FNTD2 Database</h3>
@@ -468,10 +583,10 @@
                 <div style="background: var(--bg-input-field); padding: 16px; border-radius: var(--global-radius); border: 1px solid var(--border-matrix); margin-bottom: 20px;">
                     <h4 style="color: var(--color-accent-blue); margin-bottom: 12px; font-size: 14px; font-weight: 600;" data-config-text="WELCOME.FEATURES_TITLE">What You Can Do:</h4>
                     <ul style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px;">
-                        <li style="color: var(--text-body-main); font-size: 13px;"><span data-config-text="WELCOME.FEATURE_1">🔍 Unit Finder — Search, filter, and compare unit stats</span></li>
+                        <li style="color: var(--text-body-main); font-size: 13px;"><span data-config-text="WELCOME.FEATURE_1"> Unit Ranklist — Browse units and open the official database page</span></li>
                         <li style="color: var(--text-body-main); font-size: 13px;"><span data-config-text="WELCOME.FEATURE_2">📊 Tierlist — View competitive rankings by tier</span></li>
                         <li style="color: var(--text-body-main); font-size: 13px;"><span data-config-text="WELCOME.FEATURE_3">🎲 Team Generator — Build random balanced squads</span></li>
-                        <li style="color: var(--text-body-main); font-size: 13px;"><span data-config-text="WELCOME.FEATURE_4">👾 Enemy Codex — Learn enemy behaviors & stats</span></li>
+                        <li style="color: var(--text-body-main); font-size: 13px;"><span data-config-text="WELCOME.FEATURE_4">🤠 Bounty Board — Track and manage your sheriff duties</span></li>
                     </ul>
                 </div>
 

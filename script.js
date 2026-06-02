@@ -2,6 +2,266 @@ let currentFiltersState = {
     search: "", sort: "high-low", rarities: [], ranks: [], classes: [], subclasses: [], synergy: "All"
 };
 let currentTeam = [];
+
+const OFFICIAL_UNIT_IMAGE_URLS = {
+    "Freddy": "https://tr.rbxcdn.com/180DAY-63ddb06f42f6d5c85e6cba42eb0f4d5c/420/420/Image/Png/noFilter",
+    "Bonnie": "https://tr.rbxcdn.com/180DAY-9a5388aee80fbd8d113bf2d6580d2d79/420/420/Image/Png/noFilter",
+    "Chica": "https://tr.rbxcdn.com/180DAY-781dadc7e6f8e096ee439bc9051490c8/420/420/Image/Png/noFilter",
+    "Foxy": "https://tr.rbxcdn.com/180DAY-793713dc76ca2a309ed6d6af2ba5ce56/420/420/Image/Png/noFilter",
+    "Freddy with a Glock": "https://tr.rbxcdn.com/180DAY-dd332611b0364f89c862be33220e3ec6/420/420/Image/Png/noFilter",
+    "JJ": "https://tr.rbxcdn.com/180DAY-199f5546817ec764462d5defb10f3c0d/420/420/Image/Png/noFilter",
+    "Paperpals": "https://tr.rbxcdn.com/180DAY-8ed64d4723d9d1fbd1f515a49aa038db/420/420/Image/Png/noFilter",
+    "Hor Hor Freddy": "https://tr.rbxcdn.com/180DAY-62126cafe4da164b3c37142593fb8daf/420/420/Image/Png/noFilter",
+    "Undead Chica": "https://tr.rbxcdn.com/180DAY-50fb7337f2858ad6ede8cd36f097f5b4/420/420/Image/Png/noFilter",
+    "Overwhelming Horde": "https://drive.google.com/thumbnail?id=1oI0h-nH9M8_K4tzGYs-0_Yqn2sZ_V2Uc&sz=w500"
+};
+
+const OFFICIAL_UNIT_ASSET_IDS = {
+    "Freddy": "89925249660312",
+    "Bonnie": "132275351050605",
+    "Chica": "108231225322877",
+    "Foxy": "97554562118129",
+    "Freddy with a Glock": "94326878759349",
+    "JJ": "70722815308793",
+    "Hor Hor Freddy": "106773907856543",
+    "Paperpals": "72400983395431",
+    "Undead Chica": "134007034705550"
+};
+
+const OFFICIAL_IMAGE_SERVICE_URL = 'https://cold-rice-a39a.callofdutyblackops2prueba.workers.dev';
+const OFFICIAL_IMAGE_CACHE = {};
+const OFFICIAL_IMAGE_FETCHING = new Set();
+const OFFICIAL_DATA_CACHE_KEY = 'fntd2_official_unit_cache_v2';
+const CUSTOM_UNITS_KEY = 'fntd2_custom_units_v2';
+const DELETED_UNITS_KEY = 'fntd2_deleted_unit_ids_v1';
+
+function getOfficialUnitImageUrl(unit) {
+    if (!unit) return '';
+    if (unit.officialImageUrl && unit.officialImageUrl.trim()) {
+        return unit.officialImageUrl;
+    }
+    const directUrl = OFFICIAL_UNIT_IMAGE_URLS[unit.name];
+    if (directUrl) return directUrl;
+    const assetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name];
+    if (!assetId) return '';
+    if (OFFICIAL_IMAGE_CACHE[assetId]) {
+        return OFFICIAL_IMAGE_CACHE[assetId];
+    }
+    queueOfficialImageFetch(assetId);
+    return '';
+}
+
+function queueOfficialImageFetch(assetId) {
+    if (!assetId || OFFICIAL_IMAGE_FETCHING.has(assetId) || OFFICIAL_IMAGE_CACHE[assetId] !== undefined) return;
+    OFFICIAL_IMAGE_FETCHING.add(assetId);
+    fetch(`${OFFICIAL_IMAGE_SERVICE_URL}/?assetIds=${assetId}&v=4`)
+        .then(response => response.json())
+        .then(payload => {
+            const imageUrl = payload?.data?.[0]?.imageUrl;
+            if (imageUrl) {
+                OFFICIAL_IMAGE_CACHE[assetId] = imageUrl;
+                updateOfficialImageCards(assetId, imageUrl);
+            } else {
+                OFFICIAL_IMAGE_CACHE[assetId] = null;
+            }
+        })
+        .catch(() => {
+            OFFICIAL_IMAGE_CACHE[assetId] = null;
+        })
+        .finally(() => {
+            OFFICIAL_IMAGE_FETCHING.delete(assetId);
+        });
+}
+
+function updateOfficialImageCards(assetId, imageUrl) {
+    document.querySelectorAll(`[data-unit-asset='${assetId}']`).forEach(card => {
+        card.style.backgroundImage = `url('${imageUrl}'), none`;
+    });
+}
+
+function getUnitImageUrl(unit) {
+    const officialImage = getOfficialUnitImageUrl(unit);
+    if (officialImage) return officialImage;
+    if (unit && unit.image && unit.image.trim() !== "") {
+        return unit.image;
+    }
+    return `images/units/${unit.id}.png`;
+}
+
+function getOfficialUnitUrl(unit) {
+    if (!unit || !unit.name) return 'https://fntd2.com/database/units';
+    if (unit.officialPageSlug) return `https://fntd2.com/database/units?=${unit.officialPageSlug}`;
+    const rawSlug = unit.name.trim().toLowerCase();
+    const slug = rawSlug
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    return `https://fntd2.com/database/units?=${slug}`;
+}
+
+function getSoulValue(unit) {
+    const soul = Number(unit?.soulValue ?? unit?.souls ?? 0);
+    return Number.isFinite(soul) && soul >= 0 ? soul : 0;
+}
+
+function parseOfficialStat(html, label) {
+    const safeLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`${safeLabel}\\s*([\\d,.kK+NAna/-]+)`, 'i');
+    const match = html.match(regex);
+    return match?.[1]?.trim() || '';
+}
+
+function parseNumberLike(value) {
+    if (!value) return null;
+    const normalized = String(value).replace(/,/g, '').toLowerCase();
+    if (normalized.includes('k')) {
+        const n = parseFloat(normalized.replace(/[^\d.]/g, ''));
+        return Number.isFinite(n) ? Math.round(n * 1000) : null;
+    }
+    const n = parseFloat(normalized.replace(/[^\d.]/g, ''));
+    return Number.isFinite(n) ? Math.round(n) : null;
+}
+
+function getOfficialDataCache() {
+    try {
+        return JSON.parse(localStorage.getItem(OFFICIAL_DATA_CACHE_KEY) || '{}');
+    } catch (_) {
+        return {};
+    }
+}
+
+function setOfficialDataCache(cache) {
+    localStorage.setItem(OFFICIAL_DATA_CACHE_KEY, JSON.stringify(cache));
+}
+
+async function fetchOfficialText(url) {
+    const res = await fetch(url, { credentials: 'omit' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+}
+
+async function hydrateUnitFromOfficial(unit) {
+    const slug = unit.officialPageSlug || unit.name?.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!slug) return unit;
+    const cache = getOfficialDataCache();
+    if (cache[slug]) {
+        Object.assign(unit, cache[slug]);
+        return unit;
+    }
+
+    try {
+        const [dbHtml, listHtml] = await Promise.all([
+            fetchOfficialText(`https://fntd2.com/database/units?=${slug}`),
+            fetchOfficialText(`https://fntd2.com/list?id=${slug}`)
+        ]);
+
+        const imageMeta = dbHtml.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+            || dbHtml.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+        const placementCost = parseNumberLike(parseOfficialStat(dbHtml, 'Placement Cost'));
+        const souls = parseNumberLike(parseOfficialStat(dbHtml, 'Souls')) || parseNumberLike(parseOfficialStat(listHtml, 'CURRENT VALUE'));
+        const value = parseOfficialStat(listHtml, 'CURRENT VALUE') || unit.value || 'N/A';
+        const demand = parseOfficialStat(listHtml, 'DEMAND') || unit.demand || 'N/A';
+        const status = parseOfficialStat(listHtml, 'STATUS') || unit.status || 'N/A';
+
+        const payload = {
+            officialPageSlug: slug,
+            image: imageMeta?.[1] || unit.image || '',
+            imageSourceUrl: `https://fntd2.com/database/units?=${slug}`,
+            placementCost: placementCost ?? unit.placementCost ?? 0,
+            soulValue: souls ?? unit.soulValue ?? 0,
+            value,
+            demand,
+            status
+        };
+        Object.assign(unit, payload);
+        cache[slug] = payload;
+        setOfficialDataCache(cache);
+        return unit;
+    } catch (error) {
+        return unit;
+    }
+}
+
+async function hydrateUnitsFromOfficialSources() {
+    const targets = DB_UNITS.filter(u => !u.image || !u.soulValue || !u.placementCost);
+    if (!targets.length) return;
+    await Promise.all(targets.slice(0, 30).map(hydrateUnitFromOfficial));
+    renderTierlist();
+    renderManualBuilderPool();
+    renderTeamUnitSelector();
+}
+
+function normalizeRankValue(value) {
+    if (!value || typeof value !== 'string') return 'N/A';
+    const normalized = value.trim().toUpperCase();
+    return ['S', 'A', 'B', 'C', 'D', 'F'].includes(normalized) ? normalized : 'N/A';
+}
+
+function rankLetterToScore(rank) {
+    switch (rank) {
+        case 'S': return 1;
+        case 'A': return 2;
+        case 'B': return 3;
+        case 'C': return 4;
+        case 'D': return 5;
+        case 'F': return 6;
+        default: return null;
+    }
+}
+
+function scoreToRankLetter(score) {
+    if (score <= 1.5) return 'S';
+    if (score <= 2.5) return 'A';
+    if (score <= 3.5) return 'B';
+    if (score <= 4.5) return 'C';
+    if (score <= 5.5) return 'D';
+    return 'F';
+}
+
+function computeOverallRank(unit) {
+    const values = [
+        normalizeRankValue(unit.endlessRank),
+        normalizeRankValue(unit.synergyRank),
+        normalizeRankValue(unit.obtainabilityRank),
+        normalizeRankValue(unit.personalRank?.value)
+    ]
+        .map(rankLetterToScore)
+        .filter(score => score !== null);
+
+    if (values.length === 0) {
+        unit.overallRank = 'N/A';
+        unit.overallRankScore = null;
+        return;
+    }
+
+    const average = values.reduce((sum, item) => sum + item, 0) / values.length;
+    unit.overallRankScore = Number(average.toFixed(2));
+    unit.overallRank = scoreToRankLetter(average);
+}
+
+function normalizeUnitData(unit) {
+    if (!unit) return;
+    unit.endlessRank = normalizeRankValue(unit.endlessRank || unit.rank || 'N/A');
+    unit.endlessPlacement = unit.endlessPlacement || unit.rankedId || 'N/A';
+    unit.synergyRank = normalizeRankValue(unit.synergyRank || unit.rank || 'N/A');
+    unit.synergyPlacement = unit.synergyPlacement || 'N/A';
+    unit.obtainabilityRank = normalizeRankValue(unit.obtainabilityRank || unit.rank || 'N/A');
+    unit.obtainabilityPlacement = unit.obtainabilityPlacement || 'N/A';
+
+    const personalText = unit.personalRank?.value || unit.personalRank || unit.rank || 'N/A';
+    const personalNote = unit.personalRank?.note || unit.personalRankNote || 'No personal note provided.';
+    unit.personalRank = {
+        value: normalizeRankValue(personalText),
+        note: personalNote
+    };
+
+    computeOverallRank(unit);
+}
+
+function normalizeAllUnitData() {
+    if (!Array.isArray(DB_UNITS)) return;
+    DB_UNITS.forEach(normalizeUnitData);
+}
+
 let teamSlots = Array(6).fill(null);
 let activeTeamSlotIndex = null;
 let currentTradeTab = 'global';
@@ -16,12 +276,15 @@ const PAGE_PATH_MAP = {
     "": "page-home",
     "index.html": "page-home",
     "home": "page-home",
-    "finder": "page-finder",
     "tierlist": "page-tierlist",
     "generator": "page-generator",
     "codex": "page-codex",
-    "trading": "page-trading",
     "profile": "page-profile",
+    "team": "page-generator",
+    "trade": "page-generator",
+    "units": "page-tierlist",
+    "database": "page-tierlist",
+    "enemies": "page-codex",
     "tos": "page-tos",
     "privacy": "page-privacy"
 };
@@ -125,13 +388,17 @@ function renderTeamUnitSelector() {
         return !alreadySelected && matchesSearch && matchesClass && matchesSubclass;
     });
 
-    list.innerHTML = availableUnits.map(unit => `
-        <div class="unit-card-square animate-pop rarity-${unit.rarity.replace(/\s+/g,'-')}" onclick="setTeamSlotUnit('${unit.id}')">
+    list.innerHTML = availableUnits.map(unit => {
+        const assetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name] || '';
+        const assetAttr = assetId ? ` data-unit-asset="${assetId}"` : '';
+        return `
+        <div class="unit-card-square animate-pop rarity-${unit.rarity.replace(/\s+/g,'-')}" data-unit-id="${unit.id}"${assetAttr} style="background-image: url('${getUnitImageUrl(unit)}'), none;" onclick="setTeamSlotUnit('${unit.id}')">
             <div class="square-title-top">${unit.name}</div>
             <div class="square-cost-bottom">$${unit.placementCost}</div>
             <div class="square-element-icon">${unit.element.substring(0,1).toUpperCase()}</div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 function setTeamSlotUnit(unitId) {
@@ -145,7 +412,7 @@ function setTeamSlotUnit(unitId) {
     teamSlots[activeTeamSlotIndex] = unit;
     syncCurrentTeamWithSlots();
     renderTeamSlotGrid();
-    renderGridContainer(currentTeam, 'generator-grid-container');
+    renderGridContainer([], 'generator-grid-container');
     renderManualBuilderPool();
     updateTeamRatingPanel();
     closeTeamUnitSelector();
@@ -205,13 +472,17 @@ function renderTradeUnitSelector() {
         return !alreadySelected && matchesSearch && matchesClass && matchesSubclass;
     });
 
-    list.innerHTML = availableUnits.map(unit => `
-        <div class="unit-card-square animate-pop rarity-${unit.rarity.replace(/\s+/g,'-')}" onclick="selectTradeUnit('${unit.id}')">
+    list.innerHTML = availableUnits.map(unit => {
+        const assetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name] || '';
+        const assetAttr = assetId ? ` data-unit-asset="${assetId}"` : '';
+        return `
+        <div class="unit-card-square animate-pop rarity-${unit.rarity.replace(/\s+/g,'-')}" data-unit-id="${unit.id}"${assetAttr} style="background-image: url('${getUnitImageUrl(unit)}'), none;" onclick="selectTradeUnit('${unit.id}')">
             <div class="square-title-top">${unit.name}</div>
             <div class="square-cost-bottom">$${unit.placementCost}</div>
             <div class="square-element-icon">${unit.element.substring(0,1).toUpperCase()}</div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 function selectTradeUnit(unitId) {
@@ -270,29 +541,69 @@ function migrateObtainmentsFormat() {
                 { source: "Legacy", chance: 100, method: unit.obtainments }
             ];
         }
-        
-            if (!unit.aliases) {
-                unit.aliases = [];
-            }
+
+        if (!unit.aliases) {
+            unit.aliases = [];
+        }
+        if (!unit.fanmadeBuffs) {
+            unit.fanmadeBuffs = [];
+        }
+        if (!unit.subUnits) {
+            unit.subUnits = [];
+        }
     });
 }
 
 
  
+function getDeletedUnitIds() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(DELETED_UNITS_KEY) || '[]');
+        return Array.isArray(stored) ? new Set(stored) : new Set();
+    } catch (_) {
+        return new Set();
+    }
+}
+
+function saveDeletedUnitIds(idsSet) {
+    localStorage.setItem(DELETED_UNITS_KEY, JSON.stringify(Array.from(idsSet)));
+}
+
 function saveCustomUnitsToStorage() {
-    localStorage.setItem('fntd2_custom_units', JSON.stringify(DB_UNITS));
+    const customUnits = DB_UNITS.filter(unit => unit.isCustom === true);
+    localStorage.setItem(CUSTOM_UNITS_KEY, JSON.stringify(customUnits));
+    localStorage.removeItem('fntd2_custom_units');
+}
+
+function applyDeletedUnitsFilter() {
+    const deletedIds = getDeletedUnitIds();
+    for (let i = DB_UNITS.length - 1; i >= 0; i -= 1) {
+        if (deletedIds.has(DB_UNITS[i].id)) {
+            DB_UNITS.splice(i, 1);
+        }
+    }
 }
 
 function loadCustomUnitsFromStorage() {
-    const customUnits = JSON.parse(localStorage.getItem('fntd2_custom_units') || '[]');
+    let customUnits = [];
+    try {
+        customUnits = JSON.parse(localStorage.getItem(CUSTOM_UNITS_KEY) || '[]');
+    } catch (_) {
+        customUnits = [];
+    }
+
+    if (!Array.isArray(customUnits) || !customUnits.length) {
+        localStorage.removeItem('fntd2_custom_units');
+    }
+
     customUnits.forEach(unit => {
         const existingIndex = DB_UNITS.findIndex(u => u.id === unit.id);
-        if (existingIndex >= 0) {
-            DB_UNITS[existingIndex] = unit;
-        } else {
-            DB_UNITS.push(unit);
-        }
+        const normalized = { ...unit, isCustom: true };
+        if (existingIndex >= 0) DB_UNITS[existingIndex] = normalized;
+        else DB_UNITS.push(normalized);
     });
+
+    applyDeletedUnitsFilter();
 }
 
 function regenerateComputedRanks() {
@@ -335,6 +646,50 @@ function clearAdminUnitDraft(unitId) {
 function applyConfigBindings() {
     document.title = CONFIG.getText('APP_NAME');
 
+    if (CONFIG.BACKGROUND_ASSETS) {
+        const root = document.documentElement;
+        // Background Asset Paths
+        if (CONFIG.BACKGROUND_ASSETS.CACTUS_LEFT) root.style.setProperty('--cactus-left-img', `url('${CONFIG.BACKGROUND_ASSETS.CACTUS_LEFT}')`);
+        if (CONFIG.BACKGROUND_ASSETS.CACTUS_RIGHT) root.style.setProperty('--cactus-right-img', `url('${CONFIG.BACKGROUND_ASSETS.CACTUS_RIGHT}')`);
+        if (CONFIG.BACKGROUND_ASSETS.HOUSE_1) root.style.setProperty('--house1-img', `url('${CONFIG.BACKGROUND_ASSETS.HOUSE_1}')`);
+        if (CONFIG.BACKGROUND_ASSETS.HOUSE_2) root.style.setProperty('--house2-img', `url('${CONFIG.BACKGROUND_ASSETS.HOUSE_2}')`);
+        if (CONFIG.BACKGROUND_ASSETS.JUMPING_CUBE) root.style.setProperty('--jumping-cube-img', `url('${CONFIG.BACKGROUND_ASSETS.JUMPING_CUBE}')`);
+        
+        // Animation & Position Properties
+        if (CONFIG.BACKGROUND_ASSETS.JUMPING_SPEED) {
+            root.style.setProperty('--jumping-speed', CONFIG.BACKGROUND_ASSETS.JUMPING_SPEED);
+            root.style.setProperty('--tumbleweed-speed', CONFIG.BACKGROUND_ASSETS.JUMPING_SPEED);
+        }
+        if (CONFIG.BACKGROUND_ASSETS.JUMP_HEIGHT) root.style.setProperty('--jump-height', CONFIG.BACKGROUND_ASSETS.JUMP_HEIGHT);
+        
+        // Sky & Sunset Colors
+        if (CONFIG.BACKGROUND_ASSETS.SKY_COLOR) root.style.setProperty('--sky-color', CONFIG.BACKGROUND_ASSETS.SKY_COLOR);
+        if (CONFIG.BACKGROUND_ASSETS.SKY_GRADIENT_START) root.style.setProperty('--sky-gradient-start', CONFIG.BACKGROUND_ASSETS.SKY_GRADIENT_START);
+        if (CONFIG.BACKGROUND_ASSETS.SKY_GRADIENT_END) root.style.setProperty('--sky-gradient-end', CONFIG.BACKGROUND_ASSETS.SKY_GRADIENT_END);
+        
+        // Sun Configuration
+        if (CONFIG.BACKGROUND_ASSETS.SUN_COLOR) root.style.setProperty('--sun-color', CONFIG.BACKGROUND_ASSETS.SUN_COLOR);
+        if (CONFIG.BACKGROUND_ASSETS.SUN_SIZE) root.style.setProperty('--sun-size', CONFIG.BACKGROUND_ASSETS.SUN_SIZE);
+        if (CONFIG.BACKGROUND_ASSETS.SUN_POSITION_BOTTOM) root.style.setProperty('--sun-position-bottom', CONFIG.BACKGROUND_ASSETS.SUN_POSITION_BOTTOM);
+        if (CONFIG.BACKGROUND_ASSETS.SUN_POSITION_LEFT) root.style.setProperty('--sun-position-left', CONFIG.BACKGROUND_ASSETS.SUN_POSITION_LEFT);
+        if (CONFIG.BACKGROUND_ASSETS.SUN_BLUR_GLOW) root.style.setProperty('--sun-blur-glow', CONFIG.BACKGROUND_ASSETS.SUN_BLUR_GLOW);
+        if (CONFIG.BACKGROUND_ASSETS.SUN_ANIMATION_SPEED) root.style.setProperty('--sun-animation-speed', CONFIG.BACKGROUND_ASSETS.SUN_ANIMATION_SPEED);
+        
+        // Ground & Terrain
+        if (CONFIG.BACKGROUND_ASSETS.GROUND_COLOR) root.style.setProperty('--ground-color', CONFIG.BACKGROUND_ASSETS.GROUND_COLOR);
+        if (CONFIG.BACKGROUND_ASSETS.GROUND_HEIGHT) root.style.setProperty('--ground-height', CONFIG.BACKGROUND_ASSETS.GROUND_HEIGHT);
+        if (CONFIG.BACKGROUND_ASSETS.GROUND_BORDER_COLOR) root.style.setProperty('--ground-border-color', CONFIG.BACKGROUND_ASSETS.GROUND_BORDER_COLOR);
+        
+        // Element Position Overrides
+        if (CONFIG.BACKGROUND_ASSETS.CACTUS_LEFT_BOTTOM) root.style.setProperty('--cactus-left-bottom', CONFIG.BACKGROUND_ASSETS.CACTUS_LEFT_BOTTOM);
+        if (CONFIG.BACKGROUND_ASSETS.CACTUS_LEFT_2_BOTTOM) root.style.setProperty('--cactus-left-2-bottom', CONFIG.BACKGROUND_ASSETS.CACTUS_LEFT_2_BOTTOM);
+        if (CONFIG.BACKGROUND_ASSETS.CACTUS_RIGHT_BOTTOM) root.style.setProperty('--cactus-right-bottom', CONFIG.BACKGROUND_ASSETS.CACTUS_RIGHT_BOTTOM);
+        if (CONFIG.BACKGROUND_ASSETS.CACTUS_RIGHT_2_BOTTOM) root.style.setProperty('--cactus-right-2-bottom', CONFIG.BACKGROUND_ASSETS.CACTUS_RIGHT_2_BOTTOM);
+        if (CONFIG.BACKGROUND_ASSETS.HOUSE_1_BOTTOM) root.style.setProperty('--house-1-bottom', CONFIG.BACKGROUND_ASSETS.HOUSE_1_BOTTOM);
+        if (CONFIG.BACKGROUND_ASSETS.HOUSE_2_BOTTOM) root.style.setProperty('--house-2-bottom', CONFIG.BACKGROUND_ASSETS.HOUSE_2_BOTTOM);
+        if (CONFIG.BACKGROUND_ASSETS.TUMBLEWEED_BOTTOM) root.style.setProperty('--tumbleweed-bottom', CONFIG.BACKGROUND_ASSETS.TUMBLEWEED_BOTTOM);
+    }
+
     document.querySelectorAll('[data-config-text]').forEach(element => {
         const configKey = element.dataset.configText;
         if (!configKey) return;
@@ -356,19 +711,22 @@ function applyConfigBindings() {
 
 document.addEventListener("DOMContentLoaded", () => {
     migrateObtainmentsFormat();
+    normalizeAllUnitData();
     loadCustomUnitsFromStorage();
     regenerateComputedRanks();
     applyConfigBindings();
     initViewRoutingNavs();
     initProfileAndTrading();
     buildFilterCheckboxLayouts();
-    applyFinderFilters();
     renderTierlist();
     renderEnemyCodex();
     renderManualBuilderPool();
     renderTeamSlotGrid();
     switchTeamCreatorTab('generate');
     initSystemModalEvents();
+    restoreVisualSettings();
+    initBulletHoleFx();
+    hydrateUnitsFromOfficialSources();
     handleRoute();
     window.addEventListener('popstate', handleRoute);
     initWelcomeModal();
@@ -648,41 +1006,55 @@ function initProfileAndTrading() {
  
 function buildFilterCheckboxLayouts() {
     const rBox = document.getElementById('finder-rarities-box');
-    Object.keys(DB_RARITIES).forEach(r => {
-        rBox.innerHTML += `<label><input type="checkbox" value="${r}" class="rarity-cb" checked onchange="syncFilterState()"> ${r}</label>`;
-    });
+    if (rBox) {
+        Object.keys(DB_RARITIES).forEach(r => {
+            rBox.innerHTML += `<label><input type="checkbox" value="${r}" class="rarity-cb" checked onchange="syncFilterState()"> ${r}</label>`;
+        });
+    }
 
     const rkBox = document.getElementById('finder-ranks-box');
-    ALL_RANKS.forEach(rk => {
-        ['High', 'Mid', 'Low'].forEach(prefix => {
-            const labelStr = `${prefix} ${rk}`;
-            rkBox.innerHTML += `<label><input type="checkbox" value="${labelStr}" class="rank-cb" checked onchange="syncFilterState()"> ${labelStr}</label>`;
+    if (rkBox) {
+        ALL_RANKS.forEach(rk => {
+            ['High', 'Mid', 'Low'].forEach(prefix => {
+                const labelStr = `${prefix} ${rk}`;
+                rkBox.innerHTML += `<label><input type="checkbox" value="${labelStr}" class="rank-cb" checked onchange="syncFilterState()"> ${labelStr}</label>`;
+            });
         });
-    });
+    }
 
     const cBox = document.getElementById('finder-classes-box');
-    ALL_CLASSES.forEach(c => {
-        cBox.innerHTML += `<label><input type="checkbox" value="${c}" class="class-cb" checked onchange="syncFilterState()"> ${c}</label>`;
-    });
+    if (cBox) {
+        ALL_CLASSES.forEach(c => {
+            cBox.innerHTML += `<label><input type="checkbox" value="${c}" class="class-cb" checked onchange="syncFilterState()"> ${c}</label>`;
+        });
+    }
 
     const sBox = document.getElementById('finder-subclasses-box');
-    ALL_SUBCLASSES.forEach(s => {
-        sBox.innerHTML += `<label><input type="checkbox" value="${s}" class="subclass-cb" checked onchange="syncFilterState()"> ${s}</label>`;
-    });
+    if (sBox) {
+        ALL_SUBCLASSES.forEach(s => {
+            sBox.innerHTML += `<label><input type="checkbox" value="${s}" class="subclass-cb" checked onchange="syncFilterState()"> ${s}</label>`;
+        });
+    }
 
     const synDropdown = document.getElementById('finder-synergy-dropdown');
-    ALL_SYNERGIES.forEach(syn => {
-        synDropdown.innerHTML += `<option value="${syn}">${syn}</option>`;
-    });
+    if (synDropdown) {
+        ALL_SYNERGIES.forEach(syn => {
+            synDropdown.innerHTML += `<option value="${syn}">${syn}</option>`;
+        });
+    }
 
     const genClsBox = document.getElementById('gen-classes-box');
-    ALL_CLASSES.forEach(c => {
-        genClsBox.innerHTML += `<label><input type="checkbox" value="${c}" class="gen-class-cb" checked> ${c}</label>`;
-    });
+    if (genClsBox) {
+        ALL_CLASSES.forEach(c => {
+            genClsBox.innerHTML += `<label><input type="checkbox" value="${c}" class="gen-class-cb" checked> ${c}</label>`;
+        });
+    }
     const genSubBox = document.getElementById('gen-subclasses-box');
-    ALL_SUBCLASSES.forEach(s => {
-        genSubBox.innerHTML += `<label><input type="checkbox" value="${s}" class="gen-subclass-cb" checked> ${s}</label>`;
-    });
+    if (genSubBox) {
+        ALL_SUBCLASSES.forEach(s => {
+            genSubBox.innerHTML += `<label><input type="checkbox" value="${s}" class="gen-subclass-cb" checked> ${s}</label>`;
+        });
+    }
 
     const builderClassFilter = document.getElementById('team-builder-class-filter');
     if (builderClassFilter) {
@@ -711,13 +1083,72 @@ function buildFilterCheckboxLayouts() {
     }
 
     const tEl = document.getElementById('tier-filter-element');
-    Object.keys(DB_ELEMENTS).forEach(e => tEl.innerHTML += `<option value="${e}">${e}</option>`);
+    if (tEl) {
+        Object.keys(DB_ELEMENTS).forEach(e => tEl.innerHTML += `<option value="${e}">${e}</option>`);
+    }
     const tCl = document.getElementById('tier-filter-class');
-    ALL_CLASSES.forEach(c => tCl.innerHTML += `<option value="${c}">${c}</option>`);
+    if (tCl) {
+        tCl.innerHTML = `<option value="All">All Classes</option>`;
+        ALL_CLASSES.forEach(c => tCl.innerHTML += `<option value="${c}">${c}</option>`);
+        tCl.value = 'All';
+        tCl.addEventListener('change', () => {
+            updateTierlistSubclassOptions();
+            renderTierlist();
+        });
+    }
     const tSb = document.getElementById('tier-filter-subclass');
-    ALL_SUBCLASSES.forEach(s => tSb.innerHTML += `<option value="${s}">${s}</option>`);
+    if (tSb) {
+        updateTierlistSubclassOptions();
+    }
+
+    const genElementFilter = document.getElementById('gen-element-filter');
+    if (genElementFilter) {
+        Object.keys(DB_ELEMENTS).forEach(element => {
+            genElementFilter.innerHTML += `<option value="${element}">${element}</option>`;
+        });
+    }
 
     syncFilterState();
+}
+
+function updateTierlistSubclassOptions() {
+    const tCl = document.getElementById('tier-filter-class');
+    const tSb = document.getElementById('tier-filter-subclass');
+    if (!tCl || !tSb) return;
+    const classValue = tCl.value;
+    const source = classValue === 'All' ? DB_UNITS : DB_UNITS.filter(u => u.class === classValue);
+    const subclassSet = new Set(source.flatMap(u => u.subclasses || []));
+    tSb.innerHTML = '<option value="All">All Subclasses</option>';
+    Array.from(subclassSet).forEach(sub => {
+        tSb.innerHTML += `<option value="${sub}">${sub}</option>`;
+    });
+    if (!Array.from(subclassSet).includes(tSb.value)) {
+        tSb.value = 'All';
+    }
+}
+
+function getTierlistDescriptor(classValue, subclassValue, rankType, rankValue) {
+    const rankTypeText = rankType === 'All' ? 'all rank categories' : `${rankType} rank values`;
+    const rankValueText = rankValue === 'All' ? 'all ranks' : `${rankValue}-ranked units only`;
+    const classText = classValue ? `${classValue} units are grouped by position in the game and power curve.` : 'Select a class to narrow results.';
+    const subclassText = subclassValue ? `${subclassValue} units are the subtype shown for this filter.` : 'Select a subclass to apply the filter.';
+
+    return [
+        `Showing ${rankValueText} for ${classValue} / ${subclassValue}.`,
+        `${classText}`,
+        `${subclassText}`,
+        `This view compares ${rankTypeText} in the selected unit group. S is the strongest tier, A is excellent, B is solid, C is situational, and D / F are for niche or challenge builds.`,
+        `Click any card to open the official FNTD2 database page in a new tab.`
+    ];
+}
+
+function updateTierlistExplanationText(classValue, subclassValue, rankType, rankValue) {
+    const panel = document.querySelector('.tierlist-note-panel');
+    if (!panel) return;
+    const lines = classValue && subclassValue
+        ? getTierlistDescriptor(classValue, subclassValue, rankType, rankValue)
+        : ['Pick a class and subclass to review ranks and placements for that unit group.'];
+    panel.innerHTML = lines.map(line => `<p>${line}</p>`).join('');
 }
 
 function syncFilterState() {
@@ -725,9 +1156,9 @@ function syncFilterState() {
     currentFiltersState.ranks = Array.from(document.querySelectorAll('.rank-cb:checked')).map(cb => cb.value);
     currentFiltersState.classes = Array.from(document.querySelectorAll('.class-cb:checked')).map(cb => cb.value);
     currentFiltersState.subclasses = Array.from(document.querySelectorAll('.subclass-cb:checked')).map(cb => cb.value);
-    currentFiltersState.sort = document.getElementById('sort-rarity').value;
-    currentFiltersState.synergy = document.getElementById('finder-synergy-dropdown').value;
-    currentFiltersState.search = document.getElementById('search-id').value.trim().toLowerCase();
+    currentFiltersState.sort = document.getElementById('sort-rarity')?.value || 'high-low';
+    currentFiltersState.synergy = document.getElementById('finder-synergy-dropdown')?.value || 'All';
+    currentFiltersState.search = document.getElementById('search-id')?.value.trim().toLowerCase() || '';
 }
 
 function applyFinderFilters() {
@@ -755,24 +1186,32 @@ function applyFinderFilters() {
 
 function clearAllFilters() {
     document.querySelectorAll('.filters-sidebar input[type="checkbox"]').forEach(cb => cb.checked = true);
-    document.getElementById('search-id').value = "";
-    document.getElementById('finder-synergy-dropdown').value = "All";
-    document.getElementById('sort-rarity').value = "high-low";
+    const searchField = document.getElementById('search-id');
+    if (searchField) searchField.value = "";
+    const synergyDropdown = document.getElementById('finder-synergy-dropdown');
+    if (synergyDropdown) synergyDropdown.value = "All";
+    const sortDropdown = document.getElementById('sort-rarity');
+    if (sortDropdown) sortDropdown.value = "high-low";
     applyFinderFilters();
 }
 
-function renderGridContainer(units, containerId) {
+function renderGridContainer(units, containerId, emptyNotice = null) {
     const grid = document.getElementById(containerId);
+    if (!grid) return;
     grid.innerHTML = "";
 
-    if(units.length === 0) {
-        grid.innerHTML = `<div style="color:var(--text-body-muted); padding:20px; font-size:14px;">${CONFIG.getText('FINDER.NO_RESULTS')}</div>`;
+    if (!units || units.length === 0) {
+        const message = emptyNotice || CONFIG.getText('FINDER.NO_RESULTS');
+        grid.innerHTML = `<div style="color:var(--text-body-muted); padding:20px; font-size:14px;">${message}</div>`;
         return;
     }
 
     units.forEach(unit => {
         const card = document.createElement('div');
         card.className = 'unit-card-square animate-pop rarity-' + (unit.rarity || '').replace(/\s+/g,'-');
+        card.dataset.unitId = unit.id;
+        const assetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name];
+        if (assetId) card.dataset.unitAsset = assetId;
         
         const rarityMeta = DB_RARITIES[unit.rarity];
         if (rarityMeta && rarityMeta.color.includes('gradient')) {
@@ -783,7 +1222,7 @@ function renderGridContainer(units, containerId) {
             card.style.borderImage = 'none';
         }
 
-        if (unit.image) card.style.backgroundImage = `url('${unit.image}')`;
+        card.style.backgroundImage = `url('${getUnitImageUrl(unit)}'), none`;
 
         card.innerHTML = `
             <div class="square-title-top">${unit.name}</div>
@@ -791,42 +1230,56 @@ function renderGridContainer(units, containerId) {
             <div class="square-element-icon">${unit.element.substring(0,1).toUpperCase()}</div>
         `;
 
+        card.style.cursor = 'pointer';
         card.addEventListener('mouseenter', (e) => triggerTooltipShow(unit, e));
         card.addEventListener('mousemove', triggerTooltipMove);
         card.addEventListener('mouseleave', triggerTooltipHide);
-        card.addEventListener('click', () => visualizeSpecificUnitSubpage(unit));
+        card.addEventListener('click', () => openOfficialUnitPage(unit));
 
         grid.appendChild(card);
     });
 }
 
- 
+function openOfficialUnitPage(unit) {
+    const url = getOfficialUnitUrl(unit);
+    window.open(url, '_blank', 'noopener');
+}
+
+function clearGridContainer(containerId, message = '') {
+    const grid = document.getElementById(containerId);
+    if (!grid) return;
+    grid.innerHTML = `<div style="color:var(--text-body-muted); padding:20px; font-size:14px;">${message || CONFIG.getText('FINDER.NO_RESULTS')}</div>`;
+}
+
 const tooltipNode = document.getElementById('hud-tooltip');
 
 function triggerTooltipShow(unit, event) {
-    const displayRankOnHover = document.getElementById('toggle-hover-rank').checked;
-    let waveStyleClass = "wave-score-mid";
-    if (unit.rankedWave < CONFIG.GAME_BALANCE.WAVE_THRESHOLDS.LOW_THRESHOLD) waveStyleClass = "wave-score-low";
-    else if (unit.rankedWave > CONFIG.GAME_BALANCE.WAVE_THRESHOLDS.HIGH_THRESHOLD) waveStyleClass = "wave-score-high";
+    const endlessRank = unit.endlessRank || 'N/A';
+    const endlessPlacement = unit.endlessPlacement || 'N/A';
+    const synergyRank = unit.synergyRank || 'N/A';
+    const synergyPlacement = unit.synergyPlacement || 'N/A';
+    const obtainabilityRank = unit.obtainabilityRank || 'N/A';
+    const obtainabilityPlacement = unit.obtainabilityPlacement || 'N/A';
+    const personalRankValue = unit.personalRank?.value || 'N/A';
+    const overallRank = unit.overallRank || 'N/A';
 
-    let html = `
+    const soulValue = getSoulValue(unit);
+    const html = `
         <div class="tt-line tt-title"><span>${unit.name}</span><span>${unit.id}</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">DPS (Max):</span><span style="color:var(--color-accent-blue); font-weight:700;">${Math.round(unit.damage[1] / unit.cooldown[1])}/s</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Damage:</span><span>${unit.damage[0]} - ${unit.damage[1]}</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Range:</span><span>${unit.range[0]} - ${unit.range[1]}</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Cooldown:</span><span>${unit.cooldown[0]}s - ${unit.cooldown[1]}s</span></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Endless Rank:</span><span style="color:var(--color-accent-blue); font-weight:700;">${endlessRank}</span></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Placement:</span><span>#${endlessPlacement}</span></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Synergy Rank:</span><span>${synergyRank}</span></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Placement:</span><span>#${synergyPlacement}</span></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Obtainability Rank:</span><span>${obtainabilityRank}</span></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Placement:</span><span>#${obtainabilityPlacement}</span></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Personal Rank:</span><span>${personalRankValue}</span></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Overall Rank:</span><span>${overallRank}</span></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Souls:</span><strong>${soulValue.toLocaleString()}</strong></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Value:</span><span>${unit.value || 'N/A'}</span></div>
     `;
 
-    if (displayRankOnHover) {
-        html += `
-            <div style="height:1px; background:var(--border-matrix); margin:6px 0;"></div>
-            <div class="tt-line"><span style="color:var(--text-body-muted)">Tier Rank:</span><span style="color:#fbbf24; font-weight:bold;">${unit.computedRank || (unit.rank ? `Mid ${unit.rank}` : 'Unranked')}</span></div>
-            <div class="tt-line"><span style="color:var(--text-body-muted)">Ranked ID:</span><span>#${unit.rankedId || 'N/A'}</span></div>
-            <div class="tt-line"><span style="color:var(--text-body-muted)">Endless Wave:</span><span class="${waveStyleClass}">${unit.rankedWave ?? 'N/A'}</span></div>
-        `;
-    }
-
     tooltipNode.innerHTML = html;
+    tooltipNode.style.display = 'block';
     tooltipNode.classList.remove('hidden-node');
 }
 
@@ -835,7 +1288,10 @@ function triggerTooltipMove(e) {
     tooltipNode.style.top = (e.clientY + 16) + 'px';
 }
 
-function triggerTooltipHide() { tooltipNode.classList.add('hidden-node'); }
+function triggerTooltipHide() {
+    tooltipNode.classList.add('hidden-node');
+    tooltipNode.style.display = 'none';
+}
 
 function toggleShinyState() {
     isShinyModeActive = document.getElementById('toggle-shiny').checked;
@@ -851,20 +1307,44 @@ function renderTierlist() {
     const container = document.getElementById('tierlist-rows-wrapper');
     container.innerHTML = "";
 
-    const elFilter = document.getElementById('tier-filter-element').value;
-    const clFilter = document.getElementById('tier-filter-class').value;
-    const subFilter = document.getElementById('tier-filter-subclass').value;
+    const elFilter = document.getElementById('tier-filter-element')?.value || 'All';
+    const clFilter = document.getElementById('tier-filter-class')?.value || '';
+    const subFilter = document.getElementById('tier-filter-subclass')?.value || '';
+    const rankType = document.getElementById('tier-filter-ranktype')?.value || 'All';
+    const rankValue = document.getElementById('tier-filter-rankvalue')?.value || 'All';
+    const soulMin = Number(document.getElementById('tier-filter-soul-min')?.value || 0);
+    const soulMaxRaw = Number(document.getElementById('tier-filter-soul-max')?.value || 0);
+    const hasSoulMax = soulMaxRaw > 0;
+
+    const getRankValue = (unit) => {
+        switch (rankType) {
+            case 'Endless': return unit.endlessRank;
+            case 'Personal': return unit.personalRank?.value;
+            case 'Synergy': return unit.synergyRank;
+            case 'Obtainability': return unit.obtainabilityRank;
+            case 'Overall': return unit.overallRank;
+            default: return null;
+        }
+    };
 
     ALL_RANKS.forEach(tier => {
         let matchingTierUnits = DB_UNITS.filter(u => {
-            if (u.rank !== tier) return false;
+            const baseTier = normalizeRankValue(u.rank || u.endlessRank || u.overallRank);
+            if (baseTier !== tier) return false;
             if (elFilter !== "All" && u.element !== elFilter) return false;
-            if (clFilter !== "All" && u.class !== clFilter) return false;
-            if (subFilter !== "All" && !u.subclasses.includes(subFilter)) return false;
+            if (clFilter && clFilter !== "All" && u.class !== clFilter) return false;
+            if (subFilter && subFilter !== "All" && !u.subclasses.includes(subFilter)) return false;
+            if (rankType !== 'All') {
+                const compareRank = getRankValue(u) || 'N/A';
+                if (rankValue !== 'All' && compareRank !== rankValue) return false;
+            }
+            const soulValue = getSoulValue(u);
+            if (soulValue < soulMin) return false;
+            if (hasSoulMax && soulValue > soulMaxRaw) return false;
             return true;
         });
 
-        matchingTierUnits.sort((a, b) => a.rankedId - b.rankedId);
+        matchingTierUnits.sort((a, b) => (Number(a.endlessPlacement) || 0) - (Number(b.endlessPlacement) || 0));
         if (matchingTierUnits.length === 0) return;
 
         const rowNode = document.createElement('div');
@@ -876,6 +1356,11 @@ function renderTierlist() {
         container.appendChild(rowNode);
         renderGridContainer(matchingTierUnits, `tier-body-target-${tier}`);
     });
+
+    if (!container.children.length) {
+        container.innerHTML = `<div style="color:var(--text-body-muted); padding:20px; font-size:14px;">No ranked units match your filters. Try widening class/subclass or soul range.</div>`;
+    }
+    updateTierlistExplanationText(clFilter, subFilter, rankType, rankValue);
 }
 
  
@@ -906,6 +1391,15 @@ function renderEnemyCodex() {
 
  
 function visualizeSpecificUnitSubpage(unit) {
+    openOfficialUnitPage(unit);
+}
+
+function openUnitDetailsById(unitId) {
+    const unit = DB_UNITS.find(u => u.id === unitId);
+    if (!unit) {
+        alert(`Unit with ID "${unitId}" could not be found.`);
+        return;
+    }
     detailsActiveUnit = unit;
     simulatedLevel = 1;
     simulatedEnchant = "None";
@@ -951,18 +1445,18 @@ function executeDetailsDisplayDraw() {
         </div>
     `;
 
-    const passivesBlock = unit.passives.map(p => `
+    const passivesBlock = (unit.passives || []).map(p => `
             <div style="background: var(--bg-input-field); padding: 12px; border-radius: var(--global-radius); border: 1px solid var(--border-matrix); margin-bottom: 8px;">
             <div style="font-weight:700; color:var(--text-heading); font-size:13.5px; margin-bottom:2px;">${p.name}</div>
             <div style="font-size:13px; color:var(--text-body-main); line-height:1.4;">${p.desc}</div>
         </div>
     `).join('') || `<div style="color:var(--text-body-muted); font-size:13px;">${CONFIG.getText('DETAILS.NO_PASSIVES')}</div>`;
 
-    const abilitiesBlock = unit.abilities.map(a => `
+    const abilitiesBlock = (unit.abilities || []).map(a => `
         <div style="background:var(--bg-input-field); padding:12px; border-radius:var(--global-radius); border:1px solid var(--border-matrix); margin-bottom:8px;">
             <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
                 <strong style="color:var(--text-heading); font-size:13.5px;">${a.name}</strong>
-                <span style="color:#ef4444; font-size:12px; font-weight:700;">CD: ${a.cooldown}s</span>
+                <span style="color:#ef4444; font-size:12px; font-weight:700;">CD: ${a.cooldown ?? 'N/A'}s</span>
             </div>
             <div style="font-size:13px; color:var(--text-body-main); line-height:1.4;">${a.desc}</div>
         </div>
@@ -1012,11 +1506,27 @@ function executeDetailsDisplayDraw() {
         </div>
     `;
 
+    const sourcesTabContent = `${obtainmentTabContent}${aliasesTabContent}`;
+
+    const fanmadeBuffsTabContent = `
+        <div class="specs-block-card">
+            <h4>${CONFIG.getText('DETAILS.FANMADE_BUFFS_TITLE')}</h4>
+            ${unit.fanmadeBuffs && unit.fanmadeBuffs.length ? unit.fanmadeBuffs.map(buff => `
+                <div style="margin-bottom: 10px; padding: 10px; background: var(--bg-input-field); border-radius: var(--global-radius); border: 1px solid var(--border-matrix);">
+                    <div style="font-weight: 700; color: var(--text-heading); font-size: 13px;">${buff.name}</div>
+                    <div style="font-size: 13px; color: var(--text-body-main); line-height: 1.4;">${buff.desc}</div>
+                </div>
+            `).join('') : `<div style="color: var(--text-body-muted); font-size: 13px;">No fanmade buffs registered for this unit.</div>`}
+        </div>
+    `;
+
+    const profileAssetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name] || '';
+    const assetAttribute = profileAssetId ? ` data-unit-asset="${profileAssetId}"` : '';
     target.innerHTML = `
         <div class="profile-layout-grid animate-pop">
             <div>
                 <div class="profile-summary-box">
-                    <div class="profile-avatar-frame" style="${frameBorderStyle} background-image: url('${unit.image}')"></div>
+                    <div class="profile-avatar-frame"${assetAttribute} style="${frameBorderStyle} background-image: url('${getUnitImageUrl(unit)}'), none;"></div>
                     <h2 style="color:var(--text-heading); margin-bottom:4px;">${unit.name}</h2>
                     <p style="color:var(--text-body-muted); font-size:13px; font-weight:600; text-transform:uppercase; margin-bottom:16px;">${unit.rarity} | ID: ${unit.id}</p>
                     
@@ -1036,38 +1546,29 @@ function executeDetailsDisplayDraw() {
             <div class="profile-specs-sheet">
                 <!-- Tab Navigation -->
                 <div style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 2px solid var(--border-matrix); flex-wrap: wrap;">
-                    <button data-detail-tab="stats" class="active" onclick="switchDetailTab('stats')" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-heading); cursor: pointer; font-weight: 600; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all var(--anim-speed-factor);" onmouseover="this.style.color = 'var(--color-accent-blue)';" onmouseout="this.style.color = 'var(--text-heading)';">${CONFIG.getText('DETAILS.STATS_TAB')}</button>
-                    <button data-detail-tab="passives" onclick="switchDetailTab('passives')" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-body-main); cursor: pointer; font-weight: 600; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all var(--anim-speed-factor);" onmouseover="this.style.color = 'var(--color-accent-blue)';" onmouseout="this.style.color = 'var(--text-body-main)';">${CONFIG.getText('DETAILS.PASSIVES_TAB')}</button>
-                    <button data-detail-tab="ranked" onclick="switchDetailTab('ranked')" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-body-main); cursor: pointer; font-weight: 600; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all var(--anim-speed-factor);" onmouseover="this.style.color = 'var(--color-accent-blue)';" onmouseout="this.style.color = 'var(--text-body-main)';">${CONFIG.getText('DETAILS.RANKED_TAB')}</button>
-                    <button data-detail-tab="obtainments" onclick="switchDetailTab('obtainments')" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-body-main); cursor: pointer; font-weight: 600; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all var(--anim-speed-factor);" onmouseover="this.style.color = 'var(--color-accent-blue)';" onmouseout="this.style.color = 'var(--text-body-main)';">${CONFIG.getText('DETAILS.OBTAINMENT_TAB')}</button>
-                    <button data-detail-tab="aliases" onclick="switchDetailTab('aliases')" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-body-main); cursor: pointer; font-weight: 600; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all var(--anim-speed-factor);" onmouseover="this.style.color = 'var(--color-accent-blue)';" onmouseout="this.style.color = 'var(--text-body-main)';">${CONFIG.getText('DETAILS.ALIAS_TAB')}</button>
+                    <button data-detail-tab="stats" class="detail-tab-btn active" onclick="switchDetailTab('stats')">${CONFIG.getText('DETAILS.STATS_TAB')}</button>
+                    <button data-detail-tab="passives" class="detail-tab-btn" onclick="switchDetailTab('passives')">${CONFIG.getText('DETAILS.PASSIVES_TAB')}</button>
+                    <button data-detail-tab="sources" class="detail-tab-btn" onclick="switchDetailTab('sources')">${CONFIG.getText('DETAILS.SOURCES_TAB')}</button>
+                    <button data-detail-tab="fanmade" class="detail-tab-btn" onclick="switchDetailTab('fanmade')">${CONFIG.getText('DETAILS.FANMADE_BUFFS_TAB')}</button>
                 </div>
 
                 <!-- Tab Contents -->
-                <div data-detail-content="stats" style="display: block;">${statsTabContent}</div>
+                <div data-detail-content="stats" style="display: block;">${statsTabContent}${rankedTabContent}</div>
                 <div data-detail-content="passives" style="display: none;">${passivesAbilitiesTabContent}</div>
-                <div data-detail-content="ranked" style="display: none;">${rankedTabContent}</div>
-                <div data-detail-content="obtainments" style="display: none;">${obtainmentTabContent}</div>
-                <div data-detail-content="aliases" style="display: none;">${aliasesTabContent}</div>
+                <div data-detail-content="sources" style="display: none;">${sourcesTabContent}</div>
+                <div data-detail-content="fanmade" style="display: none;">${fanmadeBuffsTabContent}</div>
             </div>
         </div>
     `;
 
     const wavePill = document.getElementById('detail-wave-score-pill');
-    if(unit.rankedWave < CONFIG.GAME_BALANCE.WAVE_THRESHOLDS.LOW_THRESHOLD) wavePill.className = "wave-score-low";
-    else if(unit.rankedWave > CONFIG.GAME_BALANCE.WAVE_THRESHOLDS.HIGH_THRESHOLD) wavePill.className = "wave-score-high";
-    else wavePill.className = "wave-score-mid";
+    if (wavePill) {
+        if (unit.rankedWave < CONFIG.GAME_BALANCE.WAVE_THRESHOLDS.LOW_THRESHOLD) wavePill.className = "wave-score-low";
+        else if (unit.rankedWave > CONFIG.GAME_BALANCE.WAVE_THRESHOLDS.HIGH_THRESHOLD) wavePill.className = "wave-score-high";
+        else wavePill.className = "wave-score-mid";
+    }
 
     triggerLiveCalculationsRun();
-
-    document.querySelectorAll('[data-detail-tab]').forEach(btn => {
-        btn.style.borderBottomColor = 'transparent';
-        btn.style.color = 'var(--text-body-main)';
-        if (btn.getAttribute('data-detail-tab') === 'stats') {
-            btn.style.borderBottomColor = 'var(--color-accent-blue)';
-            btn.style.color = 'var(--text-heading)';
-        }
-    });
 }
 
 function triggerLiveCalculationsRun() {
@@ -1088,13 +1589,17 @@ function triggerLiveCalculationsRun() {
 
     const enchantMod = CONFIG.getEnchant(simulatedEnchant);
 
-    let finalMinDmg = Math.round(unit.damage[0] * levelStatScaler * enchantMod.DMG_MOD);
-    let finalMaxDmg = Math.round(unit.damage[1] * levelStatScaler * enchantMod.DMG_MOD);
-    let finalRange = parseFloat((unit.range[0] * levelRangeScaler * enchantMod.RANGE_MOD).toFixed(1));
-    let finalCd = parseFloat((unit.cooldown[0] * levelCooldownContractor * enchantMod.CD_MOD).toFixed(2));
-    if(finalCd < 0.1) finalCd = 0.1; 
+    const [baseMinDmg, baseMaxDmg] = unit.damage || [0, 0];
+    const [baseRange] = unit.range || [0];
+    const [baseCooldown] = unit.cooldown || [0];
 
-    let computedDps = Math.round(finalMaxDmg / finalCd);
+    let finalMinDmg = Math.round(baseMinDmg * levelStatScaler * enchantMod.DMG_MOD);
+    let finalMaxDmg = Math.round(baseMaxDmg * levelStatScaler * enchantMod.DMG_MOD);
+    let finalRange = parseFloat((baseRange * levelRangeScaler * enchantMod.RANGE_MOD).toFixed(1));
+    let finalCd = parseFloat((baseCooldown * levelCooldownContractor * enchantMod.CD_MOD).toFixed(2));
+    if (isNaN(finalCd) || finalCd < 0.1) finalCd = 0.1;
+
+    let computedDps = finalCd > 0 ? Math.round(finalMaxDmg / finalCd) : 0;
 
     document.getElementById('calc-min-dmg').innerText = finalMinDmg;
     document.getElementById('calc-max-dmg').innerText = finalMaxDmg;
@@ -1103,7 +1608,7 @@ function triggerLiveCalculationsRun() {
     document.getElementById('calc-dps').innerText = computedDps + "/s";
 }
 
-function returnToCatalog() { switchView('page-finder'); }
+function returnToCatalog() { switchView('page-tierlist'); }
 
  
 function switchTeamCreatorTab(mode) {
@@ -1119,8 +1624,19 @@ function switchTeamCreatorTab(mode) {
 function generateCreatorSquad() {
     const checkedClasses = Array.from(document.querySelectorAll('.gen-class-cb:checked')).map(cb => cb.value);
     const checkedSubclasses = Array.from(document.querySelectorAll('.gen-subclass-cb:checked')).map(cb => cb.value);
+    const soulMin = Number(document.getElementById('gen-soul-min')?.value || 0);
+    const soulMax = Number(document.getElementById('gen-soul-max')?.value || 0);
+    const elementFilter = document.getElementById('gen-element-filter')?.value || 'All';
 
-    let subsetPool = DB_UNITS.filter(u => checkedClasses.includes(u.class) && u.subclasses.some(s => checkedSubclasses.includes(s)));
+    let subsetPool = DB_UNITS.filter(u => {
+        const soulValue = getSoulValue(u);
+        const matchClass = checkedClasses.includes(u.class);
+        const matchSubclass = u.subclasses.some(s => checkedSubclasses.includes(s));
+        const matchElement = elementFilter === 'All' || u.element === elementFilter;
+        const matchMin = soulValue >= soulMin;
+        const matchMax = soulMax > 0 ? soulValue <= soulMax : true;
+        return matchClass && matchSubclass && matchElement && matchMin && matchMax;
+    });
     if (subsetPool.length === 0) {
         clearTeamSlots();
         renderGridContainer([], 'generator-grid-container');
@@ -1170,7 +1686,7 @@ function addTeamMember(unitId, slotIndex = null) {
 
     teamSlots[slotIndex] = unit;
     syncCurrentTeamWithSlots();
-    renderGridContainer(currentTeam, 'generator-grid-container');
+    renderGridContainer([], 'generator-grid-container');
     renderTeamSlotGrid();
     renderManualBuilderPool();
     updateTeamRatingPanel();
@@ -1182,7 +1698,7 @@ function removeTeamMember(unitId) {
         teamSlots[slotIndex] = null;
     }
     syncCurrentTeamWithSlots();
-    renderGridContainer(currentTeam, 'generator-grid-container');
+    renderGridContainer([], 'generator-grid-container');
     renderTeamSlotGrid();
     renderManualBuilderPool();
     updateTeamRatingPanel();
@@ -1200,16 +1716,42 @@ function renderManualBuilderPool() {
     const poolContainer = document.getElementById('team-builder-pool');
     if (!poolContainer) return;
 
+    const classSelect = document.getElementById('team-builder-class-filter');
+    const subclassSelect = document.getElementById('team-builder-subclass-filter');
+    if (classSelect && classSelect.options.length === 1) {
+        const classes = [...new Set(DB_UNITS.map(u => u.class).filter(Boolean))].sort();
+        classes.forEach(className => {
+            const option = document.createElement('option');
+            option.value = className;
+            option.textContent = className;
+            classSelect.appendChild(option);
+        });
+    }
+    if (subclassSelect && subclassSelect.options.length === 1) {
+        const subclasses = [...new Set(DB_UNITS.flatMap(u => u.subclasses || []))].sort();
+        subclasses.forEach(subName => {
+            const option = document.createElement('option');
+            option.value = subName;
+            option.textContent = subName;
+            subclassSelect.appendChild(option);
+        });
+    }
+
     const searchTerm = (document.getElementById('team-builder-search')?.value.trim().toLowerCase() || '');
-    const classFilter = document.getElementById('team-builder-class-filter')?.value || 'All';
-    const subclassFilter = document.getElementById('team-builder-subclass-filter')?.value || 'All';
+    const classFilter = classSelect?.value || 'All';
+    const subclassFilter = subclassSelect?.value || 'All';
+    const soulMin = Number(document.getElementById('team-builder-soul-min')?.value || 0);
+    const soulMax = Number(document.getElementById('team-builder-soul-max')?.value || 0);
 
     const availableUnits = DB_UNITS.filter(unit => {
         const isSelected = teamSlots.some(slot => slot?.id === unit.id);
         const matchSearch = unit.name.toLowerCase().includes(searchTerm) || unit.id.toLowerCase().includes(searchTerm);
         const matchClass = classFilter === 'All' || unit.class === classFilter;
         const matchSubclass = subclassFilter === 'All' || unit.subclasses.includes(subclassFilter);
-        return !isSelected && matchSearch && matchClass && matchSubclass;
+        const soulValue = getSoulValue(unit);
+        const matchSoulMin = soulValue >= soulMin;
+        const matchSoulMax = soulMax > 0 ? soulValue <= soulMax : true;
+        return !isSelected && matchSearch && matchClass && matchSubclass && matchSoulMin && matchSoulMax;
     });
 
     poolContainer.innerHTML = '';
@@ -1221,8 +1763,10 @@ function renderManualBuilderPool() {
     availableUnits.forEach(unit => {
         const card = document.createElement('div');
         card.className = 'unit-card-square animate-pop rarity-' + (unit.rarity || '').replace(/\s+/g,'-');
+        const assetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name];
+        if (assetId) card.dataset.unitAsset = assetId;
         const rarityMeta = DB_RARITIES[unit.rarity];
-        if (unit.image) card.style.backgroundImage = `url('${unit.image}')`;
+        card.style.backgroundImage = `url('${getUnitImageUrl(unit)}'), none`;
         if (rarityMeta && rarityMeta.color.includes('gradient')) {
             card.style.borderImage = `${rarityMeta.color} 1`;
             card.style.borderColor = 'transparent';
@@ -1259,8 +1803,10 @@ function updateTeamRatingPanel() {
     activeTeam.forEach(unit => {
         const card = document.createElement('div');
         card.className = 'unit-card-square animate-pop rarity-' + (unit.rarity || '').replace(/\s+/g,'-');
+        const assetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name];
+        if (assetId) card.dataset.unitAsset = assetId;
         const rarityMeta = DB_RARITIES[unit.rarity];
-        if (unit.image) card.style.backgroundImage = `url('${unit.image}')`;
+        card.style.backgroundImage = `url('${getUnitImageUrl(unit)}'), none`;
         if (rarityMeta && rarityMeta.color.includes('gradient')) {
             card.style.borderImage = `${rarityMeta.color} 1`;
             card.style.borderColor = 'transparent';
@@ -1287,7 +1833,6 @@ function updateTeamRatingPanel() {
     });
 
     const summary = getTeamRating(activeTeam);
-    if (teamGrid) teamGrid.innerHTML = '';
     overviewNode.innerHTML = `
         <div class="rating-heading">${summary.label}</div>
         <div class="rating-score">${summary.score}/5</div>
@@ -1358,23 +1903,109 @@ const overlayNode = document.getElementById('settings-overlay');
 function openSettingsModal() { overlayNode.classList.add('active-view'); }
 function closeSettingsModal() { overlayNode.classList.remove('active-view'); }
 
+function applyVisualSettings() {
+    const ambient = document.getElementById('setting-ambient-anim')?.checked ?? true;
+    const cardGlow = document.getElementById('setting-card-glow')?.checked ?? true;
+    const dust = document.getElementById('setting-dust')?.checked ?? true;
+    const bulletHoles = document.getElementById('setting-bulletholes')?.checked ?? true;
+
+    document.body.classList.toggle('effects-reduced', !ambient);
+    document.body.classList.toggle('no-card-glow', !cardGlow);
+    document.body.classList.toggle('no-dust', !dust);
+    document.body.classList.toggle('no-bulletholes', !bulletHoles);
+
+    localStorage.setItem('fntd2_visual_settings', JSON.stringify({ ambient, cardGlow, dust, bulletHoles }));
+}
+
+function restoreVisualSettings() {
+    try {
+        const stored = JSON.parse(localStorage.getItem('fntd2_visual_settings') || '{}');
+        if (typeof stored.ambient === 'boolean' && document.getElementById('setting-ambient-anim')) {
+            document.getElementById('setting-ambient-anim').checked = stored.ambient;
+        }
+        if (typeof stored.cardGlow === 'boolean' && document.getElementById('setting-card-glow')) {
+            document.getElementById('setting-card-glow').checked = stored.cardGlow;
+        }
+        if (typeof stored.dust === 'boolean' && document.getElementById('setting-dust')) {
+            document.getElementById('setting-dust').checked = stored.dust;
+        }
+        if (typeof stored.bulletHoles === 'boolean' && document.getElementById('setting-bulletholes')) {
+            document.getElementById('setting-bulletholes').checked = stored.bulletHoles;
+        }
+    } catch (error) {
+        console.warn('Failed to restore visual settings', error);
+    }
+    applyVisualSettings();
+}
+
  
 const unitCreatorOverlay = document.getElementById('unit-creator-overlay');
 function openUnitCreator() { 
     unitCreatorOverlay.style.display = 'flex'; 
     unitCreatorOverlay.style.alignItems = 'center';
     unitCreatorOverlay.style.justifyContent = 'center';
+    switchAdminTab('units');
 }
 function closeUnitCreator() { unitCreatorOverlay.style.display = 'none'; }
 
+function switchAdminTab(tabName) {
+    document.getElementById('admin-tab-units')?.classList.toggle('active', tabName === 'units');
+    document.getElementById('admin-tab-elements')?.classList.toggle('active', tabName === 'elements');
+    document.getElementById('admin-tab-enchants')?.classList.toggle('active', tabName === 'enchants');
+    document.getElementById('admin-panel-units')?.classList.toggle('hidden', tabName !== 'units');
+    document.getElementById('admin-panel-elements')?.classList.toggle('hidden', tabName !== 'elements');
+    document.getElementById('admin-panel-enchants')?.classList.toggle('hidden', tabName !== 'enchants');
+}
+
 function submitUnitCreation(e) {
     e.preventDefault();
+    const activeAdminTab = document.getElementById('admin-tab-units')?.classList.contains('active') ? 'units'
+        : document.getElementById('admin-tab-elements')?.classList.contains('active') ? 'elements'
+            : 'enchants';
+
+    if (activeAdminTab === 'elements') {
+        const elementName = document.getElementById('creator-element-name')?.value?.trim();
+        if (!elementName) {
+            alert('Element name is required.');
+            return;
+        }
+        DB_ELEMENTS[elementName] = {
+            passiveUnit: document.getElementById('creator-element-unit-passive')?.value?.trim() || 'N/A',
+            passiveEnemy: document.getElementById('creator-element-enemy-passive')?.value?.trim() || 'N/A'
+        };
+        alert(`Element "${elementName}" saved.`);
+        return;
+    }
+
+    if (activeAdminTab === 'enchants') {
+        const enchantName = document.getElementById('creator-enchant-name')?.value?.trim();
+        if (!enchantName) {
+            alert('Enchant name is required.');
+            return;
+        }
+        DB_ENCHANTS[enchantName] = {
+            dmgMod: Number(document.getElementById('creator-enchant-dmg')?.value || 1),
+            rangeMod: Number(document.getElementById('creator-enchant-range')?.value || 1),
+            cdMod: Number(document.getElementById('creator-enchant-cd')?.value || 1)
+        };
+        alert(`Enchant "${enchantName}" saved.`);
+        return;
+    }
+
+    const unitName = document.getElementById('creator-name').value.trim();
+    const unitId = document.getElementById('creator-id').value.trim();
+    if (!unitName || !unitId) {
+        alert('Unit name and ID are required.');
+        return;
+    }
+    const unitSlug = unitName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
     const newUnit = {
-        id: document.getElementById('creator-id').value,
-        name: document.getElementById('creator-name').value,
+        id: unitId,
+        name: unitName,
         rarity: document.getElementById('creator-rarity').value,
         class: document.getElementById('creator-class').value,
         placementCost: parseInt(document.getElementById('creator-cost').value),
+        soulValue: parseInt(document.getElementById('creator-souls').value || '0', 10),
         placementLimit: parseInt(document.getElementById('creator-limit').value),
         obtainments: document.getElementById('creator-obtainment').value,
         element: document.getElementById('creator-element').value,
@@ -1386,11 +2017,23 @@ function submitUnitCreation(e) {
         passives: [],
         abilities: [],
         rank: 'N/A',
-        rankedId: 'custom'
+        rankedId: 'custom',
+        imageSourceUrl: `https://fntd2.com/database/units?=${unitSlug}`,
+        officialPageSlug: unitSlug,
+        isCustom: true
     };
     
     DB_UNITS.push(newUnit);
-    saveCustomUnitToStorage(newUnit);
+    const deletedIds = getDeletedUnitIds();
+    if (deletedIds.has(newUnit.id)) {
+        deletedIds.delete(newUnit.id);
+        saveDeletedUnitIds(deletedIds);
+    }
+    saveCustomUnitsToStorage();
+    hydrateUnitFromOfficial(newUnit).then(() => {
+        saveCustomUnitsToStorage();
+        renderTierlist();
+    });
     document.getElementById('unit-creator-form').reset();
     closeUnitCreator();
     applyFinderFilters();
@@ -1451,6 +2094,20 @@ function closeWelcomeModal() {
         overlay.style.display = 'none';
         localStorage.setItem('fntd2_welcome_shown', 'true');
     }
+}
+
+function initBulletHoleFx() {
+    const layer = document.getElementById('bullet-hole-layer');
+    if (!layer) return;
+    document.addEventListener('click', (event) => {
+        if (document.body.classList.contains('no-bulletholes')) return;
+        const hole = document.createElement('div');
+        hole.className = 'bullet-hole';
+        hole.style.left = `${event.clientX}px`;
+        hole.style.top = `${event.clientY}px`;
+        layer.appendChild(hole);
+        setTimeout(() => hole.remove(), 1050);
+    });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1803,8 +2460,51 @@ input.addEventListener('input', (e) => {
     aliasWrapper.appendChild(aliasLabel);
     aliasWrapper.appendChild(aliasInput);
     formContainer.appendChild(aliasWrapper);
-    
-    
+
+    const fanmadeWrapper = document.createElement('div');
+    fanmadeWrapper.style.cssText = 'margin-bottom: 12px; padding: 10px; background: var(--bg-input-field); border-radius: 4px;';
+    const fanmadeLabel = document.createElement('label');
+    fanmadeLabel.textContent = CONFIG.getText('ADMIN.FORM_FANMADE_BUFFS') + ' (one per line: name|description)';
+    fanmadeLabel.style.cssText = 'display: block; color: var(--text-body-main); font-size: 12px; font-weight: bold; margin-bottom: 4px;';
+    const fanmadeInput = document.createElement('textarea');
+    fanmadeInput.style.cssText = 'width: 100%; padding: 6px; background: var(--bg-card-panel); color: var(--text-body-main); border: 1px solid var(--border-matrix); border-radius: 3px; box-sizing: border-box; font-family: monospace; font-size: 11px; height: 80px;';
+    fanmadeInput.placeholder = 'Strength Boost|+15% damage when attacking single target\nSpeed Buff|+10% attack speed after 5 hits';
+    fanmadeInput.value = draftData?.fanmadeBuffs ? draftData.fanmadeBuffs.map(p => `${p.name}|${p.desc}`).join('\n') : (isEdit && unit.fanmadeBuffs ? unit.fanmadeBuffs.map(p => `${p.name}|${p.desc}`).join('\n') : '');
+    fanmadeInput.addEventListener('input', (e) => {
+        const lines = e.target.value.split('\n').filter(l => l.trim());
+        formData.fanmadeBuffs = lines.map(l => {
+            const [name, desc] = l.split('|').map(s => s.trim());
+            return { name, desc: desc || '' };
+        });
+        saveAdminUnitDraft(unitId, formData);
+    });
+    formData.fanmadeBuffs = draftData?.fanmadeBuffs ?? (isEdit && unit.fanmadeBuffs ? unit.fanmadeBuffs : []);
+    fanmadeWrapper.appendChild(fanmadeLabel);
+    fanmadeWrapper.appendChild(fanmadeInput);
+    formContainer.appendChild(fanmadeWrapper);
+
+    const subunitsWrapper = document.createElement('div');
+    subunitsWrapper.style.cssText = 'margin-bottom: 12px; padding: 10px; background: var(--bg-input-field); border-radius: 4px;';
+    const subunitsLabel = document.createElement('label');
+    subunitsLabel.textContent = CONFIG.getText('ADMIN.FORM_SUBUNITS') + ' (one per line: unitId|note)';
+    subunitsLabel.style.cssText = 'display: block; color: var(--text-body-main); font-size: 12px; font-weight: bold; margin-bottom: 4px;';
+    const subunitsInput = document.createElement('textarea');
+    subunitsInput.style.cssText = 'width: 100%; padding: 6px; background: var(--bg-card-panel); color: var(--text-body-main); border: 1px solid var(--border-matrix); border-radius: 3px; box-sizing: border-box; font-family: monospace; font-size: 11px; height: 80px;';
+    subunitsInput.placeholder = 'U012|Remake with artillery charge\nU045|Unofficial support variant';
+    subunitsInput.value = draftData?.subUnits ? draftData.subUnits.map(item => `${item.id}|${item.note || ''}`).join('\n') : (isEdit && unit.subUnits ? unit.subUnits.map(item => `${item.id}|${item.note || ''}`).join('\n') : '');
+    subunitsInput.addEventListener('input', (e) => {
+        const lines = e.target.value.split('\n').filter(l => l.trim());
+        formData.subUnits = lines.map(l => {
+            const [id, note] = l.split('|').map(s => s.trim());
+            return { id, note: note || '' };
+        });
+        saveAdminUnitDraft(unitId, formData);
+    });
+    formData.subUnits = draftData?.subUnits ?? (isEdit && unit.subUnits ? unit.subUnits : []);
+    subunitsWrapper.appendChild(subunitsLabel);
+    subunitsWrapper.appendChild(subunitsInput);
+    formContainer.appendChild(subunitsWrapper);
+
     const passivesWrapper = document.createElement('div');
     passivesWrapper.style.cssText = 'margin-bottom: 12px; padding: 10px; background: var(--bg-input-field); border-radius: 4px;';
     const passivesLabel = document.createElement('label');
@@ -1902,6 +2602,8 @@ function submitUnitForm(formData, isEdit, formOverlay, unitId) {
         placementLimit: formData.placementLimit,
         obtainments: formData.obtainments || [],
         aliases: formData.aliases || [],
+        fanmadeBuffs: formData.fanmadeBuffs || [],
+        subUnits: formData.subUnits || [],
         damage: [formData.dmg_min, formData.dmg_max],
         range: [formData.range_min, formData.range_max],
         cooldown: [formData.cd_min, formData.cd_max],
@@ -1918,11 +2620,15 @@ function submitUnitForm(formData, isEdit, formOverlay, unitId) {
         
         const idx = DB_UNITS.findIndex(u => u.id === newUnit.id);
         if (idx >= 0) {
-            DB_UNITS[idx] = newUnit;
+            DB_UNITS[idx] = { ...newUnit, isCustom: DB_UNITS[idx].isCustom !== false };
         }
     } else {
-        
-        DB_UNITS.push(newUnit);
+        DB_UNITS.push({ ...newUnit, isCustom: true });
+    }
+    const deletedIds = getDeletedUnitIds();
+    if (deletedIds.has(newUnit.id)) {
+        deletedIds.delete(newUnit.id);
+        saveDeletedUnitIds(deletedIds);
     }
     
     
@@ -1940,9 +2646,16 @@ function editAdminUnit(unitId) {
 
 function deleteAdminUnit(unitId) {
     if (confirm('Delete unit ' + unitId + '?')) {
-        DB_UNITS = DB_UNITS.filter(u => u.id !== unitId);
+        const idx = DB_UNITS.findIndex(u => u.id === unitId);
+        if (idx >= 0) DB_UNITS.splice(idx, 1);
+        const deletedIds = getDeletedUnitIds();
+        deletedIds.add(unitId);
+        saveDeletedUnitIds(deletedIds);
         saveCustomUnitsToStorage();
         loadAdminUnitsList();
+        renderTierlist();
+        renderManualBuilderPool();
+        renderTeamUnitSelector();
         alert(CONFIG.getText('MESSAGES.UNIT_DELETED') || 'Unit deleted');
     }
 }
