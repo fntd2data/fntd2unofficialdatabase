@@ -1,6 +1,8 @@
 {
-  "name": "FNTD2 Unofficial Database",
+  "name": "Remix: FNTD2 Unofficial Database",
   "description": "An unofficial interactive database, tierlist, and team creator for FNTD2 with real-time stats, Roblox integration, and robust offline fallback support.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
