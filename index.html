@@ -137,51 +137,83 @@
     <main class="content">
 
         <section id="page-home" class="page active">
-            <h1 class="page-title animate-pop" data-config-text="HOME.TITLE">Welcome Back, Partner! 🤠</h1>
-            
-            <div class="home-layout-grid">
-                <div class="hub-card animate-pop" style="animation-delay: 0.05s;">
-                    <div class="card-header-accent" data-config-text="HOME.COMMUNITY_CARD_HEADER">🎮 Join the Posse</div>
-                    <div class="card-body-content">
-                        <p class="card-desc" data-config-text="HOME.COMMUNITY_CARD_DESC">Connect with other FNTD2 players for strategies, tier updates, and live discussions.</p>
-                        <div class="link-button-cluster">
-                            <a href="https://discord.gg/fntd2" target="_blank" class="action-link-btn discord-primary" data-config-text="HOME.COMMUNITY_OFFICIAL_LINK">Official Discord</a>
-                            <a href="https://discord.gg/fntd2db" target="_blank" class="action-link-btn discord-secondary" data-config-text="HOME.COMMUNITY_DB_LINK">DB Discord</a>
+            <div class="bounty-board-hero animate-pop">
+                <div class="bounty-hero-card">
+                    <span class="hero-tag" data-config-text="HOME.HERO_TAG">Active Bounty</span>
+                    <h1 class="hero-title" data-config-text="HOME.TITLE">Welcome, Marshal.</h1>
+                    <p class="hero-subtitle" data-config-text="HOME.HERO_SUBTITLE">The wasteland is restless. Track units, manage your squad, and claim your dominance in the FNTD2 competitive circuit.</p>
+                    
+                    <div class="bounty-stats-grid">
+                        <div class="bounty-stat-item">
+                            <span class="stat-lbl" data-config-text="HOME.STAT_UNITS">Global Units</span>
+                            <span class="stat-val" id="dashboard-unit-count">---</span>
                         </div>
-                        <div class="link-button-cluster" style="margin-top:12px; gap:10px;">
-                            <a href="/tos" onclick="navigateToPage('page-tos'); return false;" class="action-link-btn" style="background:#2f3430;">Terms of Service</a>
-                            <a href="/privacy" onclick="navigateToPage('page-privacy'); return false;" class="action-link-btn" style="background:#2f3430;">Privacy Policy</a>
+                        <div class="bounty-stat-item">
+                            <span class="stat-lbl" data-config-text="HOME.STAT_META">Latest Meta</span>
+                            <span class="stat-val">v2.1.2</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="hub-card animate-pop" style="animation-delay: 0.15s; grid-column: span 1;">
-                    <div class="card-header-accent" data-config-text="HOME.UPDATES_HEADER">📝 Town News</div>
-                    <div class="card-body-content changelog-container">
-                        <div class="log-entry">
-                            <div class="log-meta">
-                                <span class="log-version">v2.1.0</span>
-                                <span class="log-date">Today</span>
+                <div class="quick-link-card">
+                    <h3 data-config-text="HOME.PORTAL_TITLE">Official Portals</h3>
+                    <a href="https://fntd2.com" target="_blank" class="portal-btn">
+                        <div class="icon">🌐</div>
+                        <div class="lbl">
+                            <div style="font-weight: 700; font-size: 13px;" data-config-text="HOME.PORTAL_WEB">Official Website</div>
+                            <div style="font-size: 11px; opacity: 0.6;">fntd2.com</div>
+                        </div>
+                    </a>
+                    <a href="https://discord.gg/fntd2" target="_blank" class="portal-btn">
+                        <div class="icon">💬</div>
+                        <div class="lbl">
+                            <div style="font-weight: 700; font-size: 13px;" data-config-text="HOME.PORTAL_DISCORD">Official Discord</div>
+                            <div style="font-size: 11px; opacity: 0.6;">discord.gg/fntd2</div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <div class="bounty-grid-section">
+                <div class="section-header">
+                    <h2 data-config-text="HOME.OP_HEADER">Strategic Operations</h2>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="switchView('page-tierlist')" class="action-btn-secondary small">View All</button>
+                    </div>
+                </div>
+
+                <div class="home-layout-grid">
+                    <div class="hub-card animate-pop" style="animation-delay: 0.15s;">
+                        <div class="card-header-accent" data-config-text="HOME.NAV_BUTTONS.FINDER">🔍 Database Access</div>
+                        <div class="card-body-content">
+                            <p class="card-desc" data-config-text="HOME.DB_DESC">Deep-dive into every unit specification. Filter by damage scaling, element type, and procurement status.</p>
+                            <button onclick="switchView('page-tierlist')" class="shortcut-btn" data-config-text="HOME.NAV_BUTTONS.FINDER">Open Database</button>
+                        </div>
+                    </div>
+
+                    <div class="hub-card animate-pop" style="animation-delay: 0.2s;">
+                        <div class="card-header-accent" data-config-text="HOME.NAV_BUTTONS.GENERATOR">🛠️ Squad Architect</div>
+                        <div class="card-body-content">
+                            <p class="card-desc" data-config-text="HOME.SQUAD_DESC">Simulate high-performance team compositions. Check for class coverage and synergy depth before you deploy.</p>
+                            <button onclick="switchView('page-generator')" class="shortcut-btn" data-config-text="HOME.NAV_BUTTONS.GENERATOR">Launch Builder</button>
+                        </div>
+                    </div>
+
+                    <div class="hub-card animate-pop" style="animation-delay: 0.25s;">
+                        <div class="card-header-accent" data-config-text="HOME.NEWS_TITLE">📊 Town News</div>
+                        <div class="card-body-content changelog-container">
+                            <div class="log-entry">
+                                <div class="log-meta">
+                                    <span class="log-version">v2.1.2</span>
+                                    <span class="log-date">Live</span>
+                                </div>
+                                <ul class="log-bullets">
+                                   <li>Automated Unit Decorations Active</li>
+                                   <li>Bounty Board 2.0 Deployment</li>
+                                   <li>Full-spectrum Portal integration</li>
+                                   <li>Performance scaling optimized</li>
+                                </ul>
                             </div>
-                            <ul class="log-bullets">
-                               <li>Wild West Theme Overhaul</li>
-                               <li>FNAF World 8-bit styling elements</li>
-                               <li>Removed Enemy Codex</li>
-                               <li>Admin Sheriff Panel Rework</li>
-                               <li>Ranked list cache bug fixed!</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="hub-card animate-pop" style="animation-delay: 0.2s;">
-                    <div class="card-header-accent" data-config-text="HOME.EXPLORE_HEADER">🚀 Explore</div>
-                    <div class="card-body-content">
-                        <p class="card-desc" data-config-text="HOME.EXPLORE_DESC">Get started with these powerful tools:</p>
-                        <div class="nav-shortcut-grid">
-                            <button onclick="switchView('page-tierlist')" class="shortcut-btn" data-config-text="HOME.EXPLORE_BROWSE">📚 Browse Units</button>
-                            <button onclick="switchView('page-tierlist')" class="shortcut-btn" data-config-text="HOME.EXPLORE_TIERS">📊 View Tiers</button>
-                            <button onclick="switchView('page-generator')" class="shortcut-btn" data-config-text="HOME.EXPLORE_SQUAD">🎲 Build Squad</button>
                         </div>
                     </div>
                 </div>

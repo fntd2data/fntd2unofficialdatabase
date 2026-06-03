@@ -660,6 +660,48 @@ function computeOverallRank(unit) {
 function normalizeUnitData(unit) {
     if (!unit) return;
     
+    // Automation: Standardize rarity names (e.g., Mythic -> Mythical)
+    if (unit.rarity === "Mythic") unit.rarity = "Mythical";
+
+    // Automation: Derived stats based on Rarity if missing or for consistency
+    const rarityStats = {
+        'Hero': { cost: 5000, limit: 1 },
+        'Exclusive': { cost: 4000, limit: 1 },
+        'Apex': { cost: 3000, limit: 1 },
+        'Nightmare': { cost: 2500, limit: 1 },
+        'Secret': { cost: 2000, limit: 1 },
+        'Mythical': { cost: 1500, limit: 2 },
+        'Epic': { cost: 800, limit: 3 },
+        'Rare': { cost: 400, limit: 4 },
+        'Uncommon': { cost: 250, limit: 5 }
+    };
+
+    if (unit.rarity && rarityStats[unit.rarity]) {
+        unit.placementCost = unit.placementCost || rarityStats[unit.rarity].cost;
+        unit.placementLimit = unit.placementLimit || rarityStats[unit.rarity].limit;
+    }
+
+    // Automation: Element / Synergy fallback
+    unit.element = unit.element || unit.synergy || 'Neutral';
+    unit.synergy = unit.element; // Sync them for UI consistency
+
+    // Handle new structured placements: [Rank, Score, ...Descriptions]
+    if (Array.isArray(unit.endless)) {
+        unit.endlessRank = unit.endless[0];
+        unit.endlessPlacement = unit.endless[1];
+        unit.endlessDesc = unit.endless.slice(2).join(", ");
+    }
+    if (Array.isArray(unit.synergyPl)) {
+        unit.synergyRank = unit.synergyPl[0];
+        unit.synergyPlacement = unit.synergyPl[1];
+        unit.synergyDesc = unit.synergyPl.slice(2).join(", ");
+    }
+    if (Array.isArray(unit.obtainability)) {
+        unit.obtainabilityRank = unit.obtainability[0];
+        unit.obtainabilityPlacement = unit.obtainability[1];
+        unit.obtainabilityDesc = unit.obtainability.slice(2).join(", ");
+    }
+
     // Auto-generate official page slug if missing
     if (unit.name && !unit.officialPageSlug) {
         unit.officialPageSlug = unit.name.trim().toLowerCase()
@@ -833,10 +875,12 @@ function renderTeamUnitSelector() {
         
         applyRarityCardStyle(card, unit);
 
+        const decorationUrl = `/images/decorations/${unit.name.toLowerCase().replace(/\s+/g, '_')}.png`;
         card.innerHTML = `
             <div class="square-title-top">${unit.name}</div>
             <div class="square-cost-bottom">$${unit.placementCost}</div>
             <div class="square-element-icon">${unit.element.substring(0,1).toUpperCase()}</div>
+            <div class="unit-decoration-layer" style="background-image: url('${decorationUrl}'), url('/images/decorations/${unit.name.toLowerCase().replace(/\s+/g, '-')}.png');"></div>
         `;
         card.addEventListener('click', () => setTeamSlotUnit(unit.id));
         list.appendChild(card);
@@ -930,10 +974,12 @@ function renderTradeUnitSelector() {
         
         applyRarityCardStyle(card, unit);
 
+        const decorationUrl = `/images/decorations/${unit.name.toLowerCase().replace(/\s+/g, '_')}.png`;
         card.innerHTML = `
             <div class="square-title-top">${unit.name}</div>
             <div class="square-cost-bottom">$${unit.placementCost}</div>
             <div class="square-element-icon">${unit.element.substring(0,1).toUpperCase()}</div>
+            <div class="unit-decoration-layer" style="background-image: url('${decorationUrl}'), url('/images/decorations/${unit.name.toLowerCase().replace(/\s+/g, '-')}.png');"></div>
         `;
         card.addEventListener('click', () => selectTradeUnit(unit.id));
         list.appendChild(card);
@@ -1164,6 +1210,11 @@ document.addEventListener("DOMContentLoaded", () => {
     initBulletHoleFx();
     hydrateUnitsFromOfficialSources();
     handleRoute();
+    
+    // Update dashboard metrics
+    const unitCountEl = document.getElementById('dashboard-unit-count');
+    if (unitCountEl) unitCountEl.textContent = DB_UNITS.length;
+
     window.addEventListener('hashchange', handleRoute);
     window.addEventListener('popstate', handleRoute);
     initWelcomeModal();
@@ -1577,12 +1628,21 @@ function getTierlistDescriptor(classValue, subclassValue, rankType, rankValue) {
 function updateTierlistExplanationText(classValue, subclassValue, rankType, rankValue) {
     const panel = document.querySelector('.tierlist-note-panel');
     if (!panel) return;
+    
+    let description = CONFIG.FILTER_DESCRIPTIONS.RANK_TYPE[rankType] || `Showing units ranked by **${rankType}**.`;
+    
     const lines = [
-        `Showing units ranked by **${rankType}**.`,
+        description,
         `Sorting within rows: Higher Endless Score = Better placement.`,
-        `Click any card to open the official FNTD2 database page in a new tab.`
+        `Click any card to open the unit's master specification record.`
     ];
-    panel.innerHTML = lines.map(line => `<p>${line}</p>`).join('');
+    
+    if (classValue && classValue !== 'All') {
+        const classDesc = CONFIG.FILTER_DESCRIPTIONS.CLASSES[classValue];
+        if (classDesc) lines.push(`**${classValue}**: ${classDesc}`);
+    }
+    
+    panel.innerHTML = lines.map(line => `<p style="margin-bottom:6px; opacity:0.9;">${line.replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text-heading)">$1</strong>')}</p>`).join('');
 }
 
 function syncFilterState() {
@@ -1604,25 +1664,32 @@ function applyRarityCardStyle(card, unit) {
     card.style.borderImage = '';
     card.style.boxShadow = '';
     
+    // Determine the base background
+    let bgLayer = '';
+    if (imageUrl && !imageUrl.includes('qftJu7p.png')) {
+        bgLayer = `linear-gradient(rgba(27, 13, 5, 0.45), rgba(27, 13, 5, 0.45)) padding-box, url('${imageUrl}') center/cover no-repeat padding-box`;
+    } else {
+        bgLayer = `linear-gradient(rgba(44, 44, 44, 0.8), rgba(22, 22, 22, 0.9)) padding-box`;
+    }
+
     if (unit.canon === false) {
         card.style.border = '2px dashed #ffd700';
         card.style.boxShadow = '0 0 10px rgba(255, 215, 0, 0.45)';
-        if (imageUrl.includes('qftJu7p.png')) {
-            card.style.background = 'linear-gradient(135deg, rgba(40,30,5,0.85) 0%, rgba(20,15,3,0.95) 100%) padding-box';
-        } else {
-            card.style.background = `linear-gradient(rgba(27, 13, 5, 0.45), rgba(27, 13, 5, 0.45)) padding-box, url('${imageUrl}') center/cover no-repeat padding-box`;
-        }
+        card.style.background = bgLayer;
     } else if (rarityMeta) {
         if (rarityMeta.color.includes('gradient')) {
+            // Apply the gradient as both the border and a subtle underlying background layer
             card.style.border = '2px solid transparent';
-            card.style.background = `linear-gradient(rgba(27, 13, 5, 0.45), rgba(27, 13, 5, 0.45)) padding-box, url('${imageUrl}') center/cover no-repeat padding-box, ${rarityMeta.color} border-box`;
+            card.style.background = `${bgLayer}, ${rarityMeta.color} border-box`;
+            card.style.boxShadow = `inset 0 0 20px rgba(255,255,255,0.05), 0 0 8px ${rarityMeta.color.split(',')[1].trim()}44`;
         } else {
             card.style.border = `2px solid ${rarityMeta.color}`;
-            card.style.background = `linear-gradient(rgba(27, 13, 5, 0.45), rgba(27, 13, 5, 0.45)) padding-box, url('${imageUrl}') center/cover no-repeat padding-box`;
+            card.style.background = bgLayer;
+            card.style.boxShadow = `0 0 5px ${rarityMeta.color}33`;
         }
     } else {
         card.style.border = '2px solid rgba(255,255,255,0.18)';
-        card.style.background = `linear-gradient(rgba(27, 13, 5, 0.45), rgba(27, 13, 5, 0.45)) padding-box, url('${imageUrl}') center/cover no-repeat padding-box`;
+        card.style.background = bgLayer;
     }
 }
 
@@ -1646,10 +1713,12 @@ function renderGridContainer(units, containerId, emptyNotice = null) {
         
         applyRarityCardStyle(card, unit);
 
+        const decorationUrl = `/images/decorations/${unit.name.toLowerCase().replace(/\s+/g, '_')}.png`;
         card.innerHTML = `
             <div class="square-title-top">${unit.name}</div>
             <div class="square-cost-bottom">$${unit.placementCost}</div>
             <div class="square-element-icon">${unit.element.substring(0,1).toUpperCase()}</div>
+            <div class="unit-decoration-layer" style="background-image: url('${decorationUrl}'), url('/images/decorations/${unit.name.toLowerCase().replace(/\s+/g, '-')}.png');"></div>
         `;
 
         card.style.cursor = 'pointer';
@@ -1682,7 +1751,6 @@ function triggerTooltipShow(unit, event) {
     const personalRankValue = unit.personalRank?.value || 'N/A';
     const personalReasoning = unit.personalRank?.note || unit.personalRankNote || 'No reasoning provided.';
     const overallRank = unit.overallRank || 'N/A';
-
     const html = `
         <div class="tt-header" style="border-bottom: 2px solid var(--border-matrix); margin-bottom: 10px; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
             <span style="font-family:var(--silkscreen-font); font-size:16px; color:#fff;">${unit.name} ${unit.canon === false ? '<span style="color:#ffd700; font-size:9px; font-weight:bold; background:rgba(255,215,0,0.12); padding:1.5px 4.5px; border-radius:3px; border:1px solid rgba(255,215,0,0.25); text-wrap:nowrap; vertical-align:middle; margin-left:4px;">CONCEPT</span>' : ''}</span>
@@ -1693,14 +1761,17 @@ function triggerTooltipShow(unit, event) {
             <div class="tt-stat-box" style="background:rgba(255,255,255,0.05); padding:6px; border-radius:4px;">
                 <div style="font-size:10px; color:var(--text-body-muted); text-transform:uppercase;">Endless</div>
                 <div style="font-size:14px;"><strong style="color:var(--color-accent-blue)">${endlessRank}</strong> <span style="font-size:10px; opacity:0.7;">Sc: ${endlessScore}</span></div>
+                ${unit.endlessDesc ? `<div style="font-size:9px; opacity:0.6; line-height:1.2; margin-top:3px;">${unit.endlessDesc}</div>` : ''}
             </div>
             <div class="tt-stat-box" style="background:rgba(255,255,255,0.05); padding:6px; border-radius:4px;">
                 <div style="font-size:10px; color:var(--text-body-muted); text-transform:uppercase;">Synergy</div>
                 <div style="font-size:14px;"><strong style="color:#ff7eb6">${synergyRank}</strong> <span style="font-size:10px; opacity:0.7;">#${synergyPlacement}</span></div>
+                ${unit.synergyDesc ? `<div style="font-size:9px; opacity:0.6; line-height:1.2; margin-top:3px;">${unit.synergyDesc}</div>` : ''}
             </div>
             <div class="tt-stat-box" style="background:rgba(255,255,255,0.05); padding:6px; border-radius:4px;">
                 <div style="font-size:10px; color:var(--text-body-muted); text-transform:uppercase;">Obtain</div>
                 <div style="font-size:14px;"><strong style="color:#8df6ff">${obtainabilityRank}</strong> <span style="font-size:10px; opacity:0.7;">#${obtainabilityPlacement}</span></div>
+                ${unit.obtainabilityDesc ? `<div style="font-size:9px; opacity:0.6; line-height:1.2; margin-top:3px;">${unit.obtainabilityDesc}</div>` : ''}
             </div>
             <div class="tt-stat-box" style="background:rgba(255,255,255,0.05); padding:6px; border-radius:4px;">
                 <div style="font-size:10px; color:var(--text-body-muted); text-transform:uppercase;">Personal</div>
@@ -1839,7 +1910,7 @@ function generateCreatorSquad() {
     const rarityFilter = document.getElementById('gen-rarity-filter')?.value || 'All';
     const statusFilter = document.getElementById('gen-status-filter')?.value || 'All';
 
-    let subsetPool = DB_UNITS.filter(u => {
+    let pool = DB_UNITS.filter(u => {
         const matchClass = checkedClasses.includes(u.class);
         const subclasses = Array.isArray(u.subclasses) ? u.subclasses : [];
         const matchSubclass = subclasses.some(s => checkedSubclasses.includes(s));
@@ -1848,7 +1919,8 @@ function generateCreatorSquad() {
         const matchStatus = statusFilter === 'All' || u.status === statusFilter;
         return matchClass && matchSubclass && matchElement && matchRarity && matchStatus;
     });
-    if (subsetPool.length === 0) {
+
+    if (pool.length === 0) {
         clearTeamSlots();
         renderGridContainer([], 'generator-grid-container');
         renderTeamSlotGrid();
@@ -1857,22 +1929,42 @@ function generateCreatorSquad() {
         return;
     }
 
+    // Advanced Scoring for Generator
+    const rankWeights = { 'S': 100, 'A': 80, 'B': 60, 'C': 40, 'D': 20, 'F': 10 };
+    const scarcityWeights = { 
+        'Hero': 2.0, 'Exclusive': 1.8, 'Apex': 1.6, 'Nightmare': 1.5, 
+        'Secret': 1.4, 'Mythical': 1.3, 'Epic': 1.2, 'Rare': 1.1, 'Uncommon': 1.0 
+    };
+
+    const scoredPool = pool.map(u => {
+        const rankScore = rankWeights[u.overallRank] || 10;
+        const multiplier = scarcityWeights[u.rarity] || 1.0;
+        return { unit: u, totalScore: rankScore * multiplier };
+    }).sort((a, b) => b.totalScore - a.totalScore);
+
     let compiledSquad = [];
-    function fetchRandomTargetNode(filterFn) {
-        let validOptions = subsetPool.filter(u => filterFn(u) && !compiledSquad.includes(u));
-        if (validOptions.length === 0) return null;
-        return validOptions[Math.floor(Math.random() * validOptions.length)];
+    const usedSubclasses = new Set();
+    const targetSize = CONFIG.GAME_BALANCE.TEAM.MAX_SIZE;
+
+    // Phase 1: High quality variety selection
+    for (const entry of scoredPool) {
+        if (compiledSquad.length >= targetSize) break;
+        const u = entry.unit;
+        
+        // Strategy: Prioritize elite units but try to cover different subclasses
+        const hasNewSubclass = u.subclasses.some(s => !usedSubclasses.has(s));
+        if (hasNewSubclass || compiledSquad.length < 2) {
+            compiledSquad.push(u);
+            u.subclasses.forEach(s => usedSubclasses.add(s));
+        }
     }
 
-    ['Early Game', 'Mid Game', 'End Game'].forEach(requiredClass => {
-        const node = fetchRandomTargetNode(u => u.class === requiredClass);
-        if (node) compiledSquad.push(node);
-    });
-
-    while (compiledSquad.length < CONFIG.GAME_BALANCE.TEAM.MAX_SIZE) {
-        let remaining = subsetPool.filter(u => !compiledSquad.includes(u));
-        if (remaining.length === 0) break;
-        compiledSquad.push(remaining[Math.floor(Math.random() * remaining.length)]);
+    // Phase 2: Fill remaining with top scorers
+    for (const entry of scoredPool) {
+        if (compiledSquad.length >= targetSize) break;
+        if (!compiledSquad.find(x => x.id === entry.unit.id)) {
+            compiledSquad.push(entry.unit);
+        }
     }
 
     teamSlots = compiledSquad.concat(Array(6 - compiledSquad.length).fill(null));
@@ -1977,10 +2069,12 @@ function renderManualBuilderPool() {
         
         applyRarityCardStyle(card, unit);
 
+        const decorationUrl = `/images/decorations/${unit.name.toLowerCase().replace(/\s+/g, '_')}.png`;
         card.innerHTML = `
             <div class="square-title-top">${unit.name}</div>
             <div class="square-cost-bottom">$${unit.placementCost}</div>
             <div class="square-element-icon">${unit.element.substring(0,1).toUpperCase()}</div>
+            <div class="unit-decoration-layer" style="background-image: url('${decorationUrl}'), url('/images/decorations/${unit.name.toLowerCase().replace(/\s+/g, '-')}.png');"></div>
         `;
         card.addEventListener('click', () => addTeamMember(unit.id));
         poolContainer.appendChild(card);
@@ -2011,10 +2105,12 @@ function updateTeamRatingPanel() {
         
         applyRarityCardStyle(card, unit);
 
+        const decorationUrl = `/images/decorations/${unit.name.toLowerCase().replace(/\s+/g, '_')}.png`;
         card.innerHTML = `
             <div class="square-title-top">${unit.name}</div>
             <div class="square-cost-bottom">$${unit.placementCost}</div>
             <div class="square-element-icon">${unit.element.substring(0,1).toUpperCase()}</div>
+            <div class="unit-decoration-layer" style="background-image: url('${decorationUrl}'), url('/images/decorations/${unit.name.toLowerCase().replace(/\s+/g, '-')}.png');"></div>
         `;
 
         const removeBtn = document.createElement('button');

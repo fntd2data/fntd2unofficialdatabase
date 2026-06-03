@@ -1,9 +1,13 @@
 const DB_RARITIES = {
-    Secret: { color: "linear-gradient(135deg, #d32f2f, #c62828)", index: 1 },
-    Mythic: { color: "linear-gradient(135deg, #ffd54f, #ffb74d)", index: 2 },
-    Epic: { color: "linear-gradient(135deg, #ba68c8, #ab47bc)", index: 4 },
-    Rare: { color: "linear-gradient(135deg, #64b5f6, #42a5f5)", index: 5 },
-    Uncommon: { color: "linear-gradient(135deg, #81c784, #66bb6a)", index: 6 }
+    Hero: { color: "linear-gradient(135deg, #877622, #9c831f, #877622)", index: 1 },
+    Exclusive: { color: "linear-gradient(135deg, #1e9b84, #1fb3b9, #1e9b84)", index: 2 },
+    Apex: { color: "linear-gradient(135deg, #d32f94, #8c28c6)", index: 3 },
+    Nightmare: { color: "linear-gradient(135deg, #2d182b, #573b54)", index: 4 },
+    Secret: { color: "linear-gradient(135deg, #bb0000, #ff0000)", index: 5 },
+    Mythical: { color: "linear-gradient(135deg, #ffd54f, #ffb74d)", index: 6 },
+    Epic: { color: "linear-gradient(135deg, #ba68c8, #ab47bc)", index: 7 },
+    Rare: { color: "linear-gradient(135deg, #64b5f6, #42a5f5)", index: 8 },
+    Uncommon: { color: "linear-gradient(135deg, #81c784, #66bb6a)", index: 9 }
 };
 
 const DB_ELEMENTS = {
@@ -26,402 +30,266 @@ const DB_UNITS = [
         id: "U001",
         name: "Freddy",
         rarity: "Uncommon",
+        element: "Neutral",
+        status: "Stable",
+        endless: ["C", 3, "Essential early defense", "Low cost allows rapid setup"],
+        synergyPl: ["C", 2, "Works with almost any neutral setup"],
+        obtainability: ["C", 4],
         class: "Early Game",
         subclasses: ["DPS"],
-        synergy: "Neutral",
-        element: "Neutral",
-        placementCost: 250,
-        placementLimit: 5,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "3",
-        synergyPlacement: "2",
-        obtainabilityPlacement: "4",
-        personalRank: {
-            value: "B",
-            note: "Solid early game defender with low cost."
-        }
+        personalRank: { value: "B", note: "Solid early game defender with low cost." }
     },
     {
         id: "U002",
         name: "Bonnie",
         rarity: "Rare",
+        element: "Dark",
+        status: "Rising",
+        endless: ["B", 6, "Excellent wave clear", "Provides massive early DPS spike"],
+        synergyPl: ["B", 4, "Strong in dark-focused teams"],
+        obtainability: ["B", 8],
         class: "Early Game",
         subclasses: ["DPS", "Support"],
-        synergy: "Dark",
-        element: "Dark",
-        placementCost: 350,
-        placementLimit: 5,
-        status: "Rising",
-        image: "",
-        endlessPlacement: "6",
-        synergyPlacement: "4",
-        obtainabilityPlacement: "8",
-        personalRank: {
-            value: "B",
-            note: "Amazing DPS capabilities alongside supportive aura."
-        }
+        personalRank: { value: "B", note: "Amazing DPS capabilities alongside supportive aura." }
     },
     {
         id: "U003",
         name: "Chica",
         rarity: "Rare",
+        element: "Nature",
+        status: "Stable",
+        endless: ["B", 9, "Sustainable healing for mid-game transitions"],
+        synergyPl: ["B", 6, "Essential for Nature health pools"],
+        obtainability: ["B", 12],
         class: "Mid Game",
         subclasses: ["Healer"],
-        synergy: "Nature",
-        element: "Nature",
-        placementCost: 400,
-        placementLimit: 4,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "9",
-        synergyPlacement: "6",
-        obtainabilityPlacement: "12",
-        personalRank: {
-            value: "B",
-            note: "Decent healer, especially useful on tough maps."
-        }
+        personalRank: { value: "B", note: "Decent healer, especially useful on tough maps." }
     },
     {
         id: "U004",
         name: "Foxy",
         rarity: "Epic",
+        element: "Electricity",
+        status: "Stable",
+        endless: ["A", 12, "Top-tier speed scaling", "Crucial for fast-moving boss waves"],
+        synergyPl: ["A", 8, "Dominates in rush-down setups"],
+        obtainability: ["A", 16],
         class: "Mid Game",
         subclasses: ["DPS", "Speed"],
-        synergy: "Electricity",
-        element: "Electricity",
-        placementCost: 650,
-        placementLimit: 3,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "12",
-        synergyPlacement: "8",
-        obtainabilityPlacement: "16",
-        personalRank: {
-            value: "A",
-            note: "Incredible attack speed scaling! Must have for endless tours."
-        }
+        personalRank: { value: "A", note: "Incredible attack speed scaling! Must have for endless tours." }
     },
     {
         id: "U005",
         name: "Freddy with a Glock",
         rarity: "Secret",
+        element: "Dark",
+        placementCost: 2000,
+        placementLimit: 1,
+        status: "Rising",
+        endless: ["S", 15],
+        synergyPl: ["S", 10],
+        obtainability: ["S", 20],
         class: "End Game",
         subclasses: ["DPS"],
-        synergy: "Dark",
-        element: "Dark",
-        placementCost: 1500,
-        placementLimit: 2,
-        status: "Rising",
-        image: "",
-        endlessPlacement: "15",
-        synergyPlacement: "10",
-        obtainabilityPlacement: "20",
-        personalRank: {
-            value: "S",
-            note: "Absolute beast. Ultimate end game DPS that takes out boss waves."
-        }
+        personalRank: { value: "S", note: "Absolute beast. Ultimate end game DPS that takes out boss waves." }
     },
     {
         id: "U006",
         name: "JJ",
         rarity: "Rare",
+        element: "Electricity",
+        status: "Stable",
+        endless: ["B", 18, "Disrupts early enemy flow", "Cheap stun/slow utility"],
+        synergyPl: ["B", 12],
+        obtainability: ["B", 24],
         class: "Early Game",
         subclasses: ["Support"],
-        synergy: "Electricity",
-        element: "Electricity",
-        placementCost: 300,
-        placementLimit: 4,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "18",
-        synergyPlacement: "12",
-        obtainabilityPlacement: "24",
-        personalRank: {
-            value: "B",
-            note: "Useful utility on early wave structures."
-        }
+        personalRank: { value: "B", note: "Useful utility on early wave structures." }
     },
     {
         id: "U007",
         name: "Paperpals",
-        rarity: "Mythic",
+        rarity: "Mythical",
+        element: "Nature",
+        status: "Stable",
+        endless: ["A", 21, "Massive range buff radius", "Links multiple mid-game defenders"],
+        synergyPl: ["A", 14, "Essential for Nature health pools"],
+        obtainability: ["A", 28],
         class: "Mid Game",
         subclasses: ["Support"],
-        synergy: "Nature",
-        element: "Nature",
-        placementCost: 800,
-        placementLimit: 2,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "21",
-        synergyPlacement: "14",
-        obtainabilityPlacement: "28",
-        personalRank: {
-            value: "A",
-            note: "Great synergy support buff matrix."
-        }
+        personalRank: { value: "A", note: "Great synergy support buff matrix." }
     },
     {
         id: "U008",
         name: "Hor Hor Freddy",
-        rarity: "Mythic",
+        rarity: "Mythical",
+        element: "Fire",
+        status: "Rising",
+        endless: ["A", 24, "Lingering burn patches", "Great for corridor defense"],
+        synergyPl: ["A", 16],
+        obtainability: ["A", 32],
         class: "End Game",
         subclasses: ["DPS"],
-        synergy: "Fire",
-        element: "Fire",
-        placementCost: 1200,
-        placementLimit: 3,
-        status: "Rising",
-        image: "",
-        endlessPlacement: "24",
-        synergyPlacement: "16",
-        obtainabilityPlacement: "32",
-        personalRank: {
-            value: "A",
-            note: "Huge single-hit fire output."
-        }
+        personalRank: { value: "A", note: "Huge single-hit fire output." }
     },
     {
         id: "U009",
         name: "Undead Chica",
         rarity: "Epic",
+        element: "Rust",
+        status: "Stable",
+        endless: ["B", 27, "High armor reduction on hit", "Softens up huge tanks"],
+        synergyPl: ["B", 18],
+        obtainability: ["B", 36],
         class: "Mid Game",
         subclasses: ["DPS"],
-        synergy: "Rust",
-        element: "Rust",
-        placementCost: 550,
-        placementLimit: 5,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "27",
-        synergyPlacement: "18",
-        obtainabilityPlacement: "36",
-        personalRank: {
-            value: "B",
-            note: "Stat reductions are helpful vs high-armor enemies."
-        }
+        personalRank: { value: "B", note: "Stat reductions are helpful vs high-armor enemies." }
     },
     {
         id: "U010",
         name: "Gilded Freddy",
-        canon: false,
         rarity: "Secret",
+        element: "Light",
+        status: "Rising",
+        canon: false,
+        endless: ["S", 2, "Unrivaled gold scaling", "Constructs provide infinite stall"],
+        synergyPl: ["S", 2],
+        obtainability: ["S", 40],
         class: "End Game",
         subclasses: ["DPS"],
-        synergy: "Light",
-        element: "Light",
-        placementCost: 1700,
-        placementLimit: 1,
-        status: "Rising",
-        image: "",
-        endlessPlacement: "2",
-        synergyPlacement: "2",
-        obtainabilityPlacement: "40",
-        personalRank: {
-            value: "S",
-            note: "Summons gilded constructs that melt waves instantly."
-        }
+        personalRank: { value: "S", note: "Summons gilded constructs that melt waves instantly." }
     },
     {
         id: "U011",
         name: "Springtrap",
-        rarity: "Mythic",
+        rarity: "Mythical",
+        element: "Fire",
+        status: "Stable",
+        endless: ["A", 5, "Continuous fire spray", "Static defense king"],
+        synergyPl: ["A", 4],
+        obtainability: ["A", 44],
         class: "End Game",
         subclasses: ["DPS"],
-        synergy: "Fire",
-        element: "Fire",
-        placementCost: 1400,
-        placementLimit: 2,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "5",
-        synergyPlacement: "4",
-        obtainabilityPlacement: "44",
-        personalRank: {
-            value: "A",
-            note: "Passive burning aura and high single-target scaling."
-        }
+        personalRank: { value: "A", note: "Passive burning aura and high single-target scaling." }
     },
     {
         id: "U012",
         name: "Golden Freddy",
-        rarity: "Mythic",
+        rarity: "Mythical",
+        element: "Light",
+        status: "Rising",
+        endless: ["S", 8, "High frequency stuns", "Stops boss movement dead"],
+        synergyPl: ["S", 3],
+        obtainability: ["S", 48],
         class: "Mid Game",
         subclasses: ["Support"],
-        synergy: "Light",
-        element: "Light",
-        placementCost: 1100,
-        placementLimit: 2,
-        status: "Rising",
-        image: "",
-        endlessPlacement: "8",
-        synergyPlacement: "3",
-        obtainabilityPlacement: "48",
-        personalRank: {
-            value: "S",
-            note: "Locks down enemies with high-priority stun triggers."
-        }
+        personalRank: { value: "S", note: "Locks down enemies with high-priority stun triggers." }
     },
     {
         id: "U013",
         name: "Shadow Bonnie",
         rarity: "Epic",
+        element: "Dark",
+        status: "Stable",
+        endless: ["A", 11, "Global speed debuff aura", "Increases team reaction window"],
+        synergyPl: ["A", 5],
+        obtainability: ["A", 52],
         class: "Mid Game",
         subclasses: ["DPS", "Support"],
-        synergy: "Dark",
-        element: "Dark",
-        placementCost: 850,
-        placementLimit: 3,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "11",
-        synergyPlacement: "5",
-        obtainabilityPlacement: "52",
-        personalRank: {
-            value: "A",
-            note: "Creates deep shadows that debuff enemy standard speed."
-        }
+        personalRank: { value: "A", note: "Creates deep shadows that debuff enemy standard speed." }
     },
     {
         id: "U014",
         name: "Toy Freddy",
         rarity: "Rare",
+        element: "Neutral",
+        status: "Stable",
+        endless: ["B", 14, "Robust early health check", "Stays relevant until late-mid game"],
+        synergyPl: ["B", 20],
+        obtainability: ["B", 56],
         class: "Early Game",
         subclasses: ["DPS"],
-        synergy: "Neutral",
-        element: "Neutral",
-        placementCost: 300,
-        placementLimit: 5,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "14",
-        synergyPlacement: "20",
-        obtainabilityPlacement: "56",
-        personalRank: {
-            value: "B",
-            note: "Very steady DPS with comfortable initial path costs."
-        }
+        personalRank: { value: "B", note: "Very steady DPS with comfortable initial path costs." }
     },
     {
         id: "U015",
         name: "Toy Chica",
         rarity: "Rare",
+        element: "Nature",
+        status: "Stable",
+        endless: ["B", 17, "Area denial via vines", "Clusters enemies for AoE DPS"],
+        synergyPl: ["B", 22],
+        obtainability: ["B", 60],
         class: "Early Game",
         subclasses: ["Support"],
-        synergy: "Nature",
-        element: "Nature",
-        placementCost: 280,
-        placementLimit: 4,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "17",
-        synergyPlacement: "22",
-        obtainabilityPlacement: "60",
-        personalRank: {
-            value: "B",
-            note: "Provides range boosts to early deployment arrays."
-        }
+        personalRank: { value: "B", note: "Provides range boosts to early deployment arrays." }
     },
     {
         id: "U016",
         name: "Toy Bonnie",
         rarity: "Rare",
+        element: "Electricity",
+        status: "Stable",
+        endless: ["B", 20, "High impact electrical pulses"],
+        synergyPl: ["B", 24],
+        obtainability: ["B", 64],
         class: "Early Game",
         subclasses: ["DPS", "Speed"],
-        synergy: "Electricity",
-        element: "Electricity",
-        placementCost: 320,
-        placementLimit: 5,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "20",
-        synergyPlacement: "24",
-        obtainabilityPlacement: "64",
-        personalRank: {
-            value: "B",
-            note: "Fast charge bursts perfect for running targets."
-        }
+        personalRank: { value: "B", note: "Fast charge bursts perfect for running targets." }
     },
     {
         id: "U017",
         name: "Marionette",
         rarity: "Epic",
+        element: "Light",
+        placementCost: 800,
+        placementLimit: 3,
+        status: "Stable",
+        endless: ["A", 23],
+        synergyPl: ["A", 26],
+        obtainability: ["A", 68],
         class: "Mid Game",
         subclasses: ["Support"],
-        synergy: "Light",
-        element: "Light",
-        placementCost: 900,
-        placementLimit: 4,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "23",
-        synergyPlacement: "26",
-        obtainabilityPlacement: "68",
-        personalRank: {
-            value: "A",
-            note: "Maintains strong music box aura that slows massive bosses."
-        }
+        personalRank: { value: "A", note: "Maintains strong music box aura that slows massive bosses." }
     },
     {
         id: "U018",
         name: "Balloon Boy",
         rarity: "Uncommon",
+        element: "Nature",
+        status: "Stable",
+        endless: ["C", 26, "Incredibly funny", "Disables regular targets temporarily"],
+        synergyPl: ["C", 28],
+        obtainability: ["C", 72],
         class: "Early Game",
         subclasses: ["Support"],
-        synergy: "Nature",
-        element: "Nature",
-        placementCost: 200,
-        placementLimit: 4,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "26",
-        synergyPlacement: "28",
-        obtainabilityPlacement: "72",
-        personalRank: {
-            value: "C",
-            note: "Incredibly funny, disables regular targets temporarily."
-        }
+        personalRank: { value: "C", note: "Incredibly funny, disables regular targets temporarily." }
     },
     {
         id: "U019",
         name: "Withered Foxy",
         rarity: "Epic",
+        element: "Electricity",
+        status: "Rising",
+        endless: ["A", 29, "Charges with intense initial strike speed"],
+        synergyPl: ["A", 30],
+        obtainability: ["A", 76],
         class: "Mid Game",
         subclasses: ["DPS", "Speed"],
-        synergy: "Electricity",
-        element: "Electricity",
-        placementCost: 750,
-        placementLimit: 4,
-        status: "Rising",
-        image: "",
-        endlessPlacement: "29",
-        synergyPlacement: "30",
-        obtainabilityPlacement: "76",
-        personalRank: {
-            value: "A",
-            note: "Charges across the maps with intense initial strike speed."
-        }
+        personalRank: { value: "A", note: "Charges across the maps with intense initial strike speed." }
     },
     {
         id: "U020",
         name: "Circus Baby",
-        rarity: "Mythic",
+        rarity: "Mythical",
+        element: "Rust",
+        status: "Stable",
+        endless: ["S", 32, "Giant mechanical claw damage sweep"],
+        synergyPl: ["S", 32],
+        obtainability: ["S", 80],
         class: "End Game",
         subclasses: ["DPS"],
-        synergy: "Rust",
-        element: "Rust",
-        placementCost: 1300,
-        placementLimit: 3,
-        status: "Stable",
-        image: "",
-        endlessPlacement: "32",
-        synergyPlacement: "32",
-        obtainabilityPlacement: "80",
-        personalRank: {
-            value: "S",
-            note: "Giant mechanical claw damage sweep."
-        }
+        personalRank: { value: "S", note: "Giant mechanical claw damage sweep." }
     }
 ];
 
