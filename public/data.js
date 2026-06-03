@@ -36,7 +36,7 @@ const DB_UNITS = [
         obtainability: ["S", 999],
         class: "Early Game",
         subclasses: ["DPS"],
-        personalRank: { value: "F", note: "He is just bad. atleast hes basically free" }
+        personalRank: { value: "F", note: "Surprisingly high damage" }
     },
     {
         id: "U002",
@@ -45,11 +45,10 @@ const DB_UNITS = [
         element: "Neutral",
         status: "Stable",
         endless: ["D", 41],
-        synergyPl: ["B", 2, "TBA"],
         obtainability: ["S", 998],
         class: "Early Game",
         subclasses: ["DPS"],
-        personalRank: { value: "D", note: "Overall a good starter" }
+        personalRank: { value: "D", note: "Self boost + high dps, you cant get a better uncommon then this" }
     },
     {
         id: "U003",
@@ -58,11 +57,10 @@ const DB_UNITS = [
         element: "Neutral",
         status: "Stable",
         endless: ["F", 32],
-        synergyPl: ["B", 2, "TBA"],
         obtainability: ["S", 997],
         class: "Early Game",
         subclasses: ["DPS"],
-        personalRank: { value: "F", note: "I would use her as a last resort" }
+        personalRank: { value: "F", note: "Same damage as bonnie but she just sucks" }
     },
     {
         id: "U004",
@@ -71,24 +69,95 @@ const DB_UNITS = [
         element: "Neutral",
         status: "Stable",
         endless: ["F", 32],
-        synergyPl: ["B", 2, "TBA"],
         obtainability: ["S", 996],
         class: "Early Game",
         subclasses: ["DPS"],
-        personalRank: { value: "F", note: "I would use him as a last resort" }
+        personalRank: { value: "F", note: "Same damage as bonnie but even worse then chica??" }
     },
     {
-        id: "U001",
+        id: "U005",
         name: "Freddy with a glock",
         rarity: "Uncommon",
         element: "Neutral",
         status: "Stable",
         endless: ["D", 42],
-        synergyPl: ["B", 2, "TBA"],
         obtainability: ["S", 999],
         class: "Early Game",
         subclasses: ["DPS"],
-        personalRank: { value: "F", note: "He is just bad. never though adding a gun would make him equal to his normal version" }
+        personalRank: { value: "F", note: "Just freddy." }
+    },
+
+    {
+        id: "U006",
+        name: "Undead Chica",
+        rarity: "Rare",
+        element: "Rust",
+        status: "Stable",
+        endless: ["C", 53, "due to a bug, her summons hit bosses"],
+        obtainability: ["B", 999],
+        class: "Early Game",
+        subclasses: ["Summon"],
+        personalRank: { value: "B", note: "Consistent mid hp summons" }
+    },
+    {
+        id: "U007",
+        name: "JJ",
+        rarity: "Rare",
+        element: "Rust",
+        status: "Stable",
+        endless: ["B", 63, "these results shocked me"],
+        obtainability: ["S", 899],
+        class: "Early Game",
+        subclasses: ["DPS"],
+        personalRank: { value: "B", note: "Higher dps + horde control" }
+    },
+    {
+        id: "U008",
+        name: "PaperPals",
+        rarity: "Rare",
+        element: "Rust",
+        status: "Stable",
+        endless: ["A", 83, "without kaboom byte they suck"],
+        obtainability: ["S", 898],
+        class: "Early Game",
+        subclasses: ["DPS"],
+        personalRank: { value: "A", note: "high dps with circle aoe, go for this as your first starter" }
+    },
+    {
+        id: "U009",
+        name: "Bidybabs",
+        rarity: "Rare",
+        element: "Rust",
+        status: "Stable",
+        endless: ["F", 2, "without kaboom byte they suck"],
+        obtainability: ["A", 798],
+        class: "Early Game",
+        subclasses: ["DPS"],
+        personalRank: { value: "C", note: "i believe they can be decent with bytes" }
+    },
+    {
+        id: "U010",
+        name: "Nightmare Freddy",
+        rarity: "Rare",
+        element: "Rust",
+        status: "Stable",
+        endless: ["F", 2, "without kaboom he sucks"],
+        obtainability: ["A", 798],
+        class: "Early Game",
+        subclasses: ["DPS"],
+        personalRank: { value: "C", note: "same like bidybabs, without bytes he will suck" }
+    },
+    {
+        id: "U011",
+        name: "Hor Hor Freddy",
+        rarity: "Rare",
+        element: "Rust",
+        status: "Stable",
+        endless: ["F", 3, "wow."],
+        obtainability: ["F", "cant get him without trading or april fools present"],
+        class: "Early Game",
+        subclasses: ["DPS"],
+        personalRank: { value: "D", note: "can be good, but just sucks at the start of the match, especially on endless 5" }
     },
 ];
 
