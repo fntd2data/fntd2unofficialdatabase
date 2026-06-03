@@ -3,33 +3,18 @@ let currentFiltersState = {
 };
 let currentTeam = [];
 
-const OFFICIAL_UNIT_IMAGE_URLS = {
-    "Freddy": "https://tr.rbxcdn.com/180DAY-63ddb06f42f6d5c85e6cba42eb0f4d5c/420/420/Image/Png/noFilter",
-    "Bonnie": "https://tr.rbxcdn.com/180DAY-9a5388aee80fbd8d113bf2d6580d2d79/420/420/Image/Png/noFilter",
-    "Chica": "https://tr.rbxcdn.com/180DAY-781dadc7e6f8e096ee439bc9051490c8/420/420/Image/Png/noFilter",
-    "Foxy": "https://tr.rbxcdn.com/180DAY-793713dc76ca2a309ed6d6af2ba5ce56/420/420/Image/Png/noFilter",
-    "Freddy with a Glock": "https://tr.rbxcdn.com/180DAY-dd332611b0364f89c862be33220e3ec6/420/420/Image/Png/noFilter",
-    "JJ": "https://tr.rbxcdn.com/180DAY-199f5546817ec764462d5defb10f3c0d/420/420/Image/Png/noFilter",
-    "Paperpals": "https://tr.rbxcdn.com/180DAY-8ed64d4723d9d1fbd1f515a49aa038db/420/420/Image/Png/noFilter",
-    "Hor Hor Freddy": "https://tr.rbxcdn.com/180DAY-62126cafe4da164b3c37142593fb8daf/420/420/Image/Png/noFilter",
-    "Undead Chica": "https://tr.rbxcdn.com/180DAY-50fb7337f2858ad6ede8cd36f097f5b4/420/420/Image/Png/noFilter",
-    "Overwhelming Horde": "https://drive.google.com/thumbnail?id=1oI0h-nH9M8_K4tzGYs-0_Yqn2sZ_V2Uc&sz=w500"
-};
-
-const OFFICIAL_UNIT_ASSET_IDS = {
-    "Freddy": "89925249660312",
-    "Bonnie": "132275351050605",
-    "Chica": "108231225322877",
-    "Foxy": "97554562118129",
-    "Freddy with a Glock": "94326878759349",
-    "JJ": "70722815308793",
-    "Hor Hor Freddy": "106773907856543",
-    "Paperpals": "72400983395431",
-    "Undead Chica": "134007034705550"
+const UNIT_NAME_ALIASES = {
+    "marionette": "puppet",
+    "puppet": "marionette"
 };
 
 const OFFICIAL_IMAGE_SERVICE_URL = 'https://cold-rice-a39a.callofdutyblackops2prueba.workers.dev';
-const OFFICIAL_IMAGE_CACHE = {};
+let OFFICIAL_IMAGE_CACHE = {};
+try {
+    OFFICIAL_IMAGE_CACHE = JSON.parse(localStorage.getItem('fntd2_official_image_cache_v2') || '{}');
+} catch (e) {
+    OFFICIAL_IMAGE_CACHE = {};
+}
 const OFFICIAL_IMAGE_FETCHING = new Set();
 const OFFICIAL_DATA_CACHE_KEY = 'fntd2_official_unit_cache_v2';
 const CUSTOM_UNITS_KEY = 'fntd2_custom_units_v2';
@@ -37,29 +22,37 @@ const DELETED_UNITS_KEY = 'fntd2_deleted_unit_ids_v1';
 
 function getOfficialUnitImageUrl(unit) {
     if (!unit) return '';
+    
     if (unit.officialImageUrl && unit.officialImageUrl.trim()) {
         return unit.officialImageUrl;
     }
-    const directUrl = OFFICIAL_UNIT_IMAGE_URLS[unit.name];
-    if (directUrl) return directUrl;
-    const assetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name];
-    if (!assetId) return '';
-    if (OFFICIAL_IMAGE_CACHE[assetId]) {
-        return OFFICIAL_IMAGE_CACHE[assetId];
+    
+    // Check if we have an asset ID
+    let assetId = unit.officialAssetId;
+    if (assetId) {
+        if (OFFICIAL_IMAGE_CACHE[assetId]) return OFFICIAL_IMAGE_CACHE[assetId];
+        queueOfficialImageFetch(assetId);
     }
-    queueOfficialImageFetch(assetId);
+    
     return '';
 }
 
 function queueOfficialImageFetch(assetId) {
     if (!assetId || OFFICIAL_IMAGE_FETCHING.has(assetId) || OFFICIAL_IMAGE_CACHE[assetId] !== undefined) return;
     OFFICIAL_IMAGE_FETCHING.add(assetId);
-    fetch(`${OFFICIAL_IMAGE_SERVICE_URL}/?assetIds=${assetId}&v=4`)
+    
+    const targetUrl = `${OFFICIAL_IMAGE_SERVICE_URL}/?assetIds=${assetId}&v=4`;
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+    
+    fetch(proxyUrl)
         .then(response => response.json())
         .then(payload => {
             const imageUrl = payload?.data?.[0]?.imageUrl;
             if (imageUrl) {
                 OFFICIAL_IMAGE_CACHE[assetId] = imageUrl;
+                try {
+                    localStorage.setItem('fntd2_official_image_cache_v2', JSON.stringify(OFFICIAL_IMAGE_CACHE));
+                } catch (_) {}
                 updateOfficialImageCards(assetId, imageUrl);
             } else {
                 OFFICIAL_IMAGE_CACHE[assetId] = null;
@@ -75,17 +68,49 @@ function queueOfficialImageFetch(assetId) {
 
 function updateOfficialImageCards(assetId, imageUrl) {
     document.querySelectorAll(`[data-unit-asset='${assetId}']`).forEach(card => {
-        card.style.backgroundImage = `url('${imageUrl}'), none`;
+        const unitId = card.dataset.unitId;
+        if (unitId) {
+            const unit = DB_UNITS.find(u => u.id === unitId);
+            if (unit) {
+                applyRarityCardStyle(card, unit);
+                return;
+            }
+        }
+        card.style.backgroundImage = `url('${imageUrl}')`;
     });
 }
 
 function getUnitImageUrl(unit) {
+    if (!unit) return '';
+    
+    // 1. Check direct official URL / overrides / assetId
     const officialImage = getOfficialUnitImageUrl(unit);
-    if (officialImage) return officialImage;
-    if (unit && unit.image && unit.image.trim() !== "") {
-        return unit.image;
+    if (officialImage && officialImage !== '') return officialImage;
+    
+    // 2. Check fetched online image
+    if (unit.image && unit.image.trim() !== '') {
+        // If it's a raw roblox asset ID from wiki_data, convert to thumbnail URL
+        if (unit.image.includes('rbxassetid://')) {
+            const assetId = unit.image.replace('rbxassetid://', '').trim();
+            if (assetId) {
+                if (OFFICIAL_IMAGE_CACHE[assetId]) return OFFICIAL_IMAGE_CACHE[assetId];
+                queueOfficialImageFetch(assetId);
+                return `https://iili.io/qftJu7p.png`;
+            }
+        }
+        
+        // If it's a Google Drive ID, let's format it with dimensions for embedding
+        const trimmed = unit.image.trim();
+        if (trimmed.length === 33 || (!trimmed.startsWith('http') && trimmed !== '')) {
+            return `https://drive.google.com/thumbnail?id=${trimmed}&sz=w500`;
+        }
+        
+        // Otherwise, it is a fully formed URL
+        return trimmed;
     }
-    return `images/units/${unit.id}.png`;
+    
+    // 3. Fallback dynamically to a predictable local or clean vector icon placeholder instead of a broken page URL
+    return `https://iili.io/qftJu7p.png`;
 }
 
 function getOfficialUnitUrl(unit) {
@@ -98,11 +123,6 @@ function getOfficialUnitUrl(unit) {
     return `https://fntd2.com/database/units?=${slug}`;
 }
 
-function getSoulValue(unit) {
-    const soul = Number(unit?.soulValue ?? unit?.souls ?? 0);
-    return Number.isFinite(soul) && soul >= 0 ? soul : 0;
-}
-
 function parseOfficialStat(html, label) {
     const safeLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`${safeLabel}\\s*([\\d,.kK+NAna/-]+)`, 'i');
@@ -112,13 +132,32 @@ function parseOfficialStat(html, label) {
 
 function parseNumberLike(value) {
     if (!value) return null;
-    const normalized = String(value).replace(/,/g, '').toLowerCase();
-    if (normalized.includes('k')) {
-        const n = parseFloat(normalized.replace(/[^\d.]/g, ''));
-        return Number.isFinite(n) ? Math.round(n * 1000) : null;
+    const cleanStr = String(value).trim().toLowerCase();
+    if (cleanStr === 'n/a') return null;
+
+    const parsePart = (part) => {
+        const cleaned = part.replace(/[^0-9.k]/g, '');
+        const hasK = cleaned.includes('k');
+        const numPart = parseFloat(cleaned.replace('k', ''));
+        if (isNaN(numPart)) return null;
+        return hasK ? numPart * 1000 : numPart;
+    };
+
+    if (cleanStr.includes('-')) {
+        const parts = cleanStr.split('-');
+        const val1 = parsePart(parts[0]);
+        const val2 = parsePart(parts[1]);
+        if (val1 !== null && val2 !== null) {
+            return Math.round((val1 + val2) / 2);
+        } else if (val1 !== null) {
+            return Math.round(val1);
+        } else if (val2 !== null) {
+            return Math.round(val2);
+        }
     }
-    const n = parseFloat(normalized.replace(/[^\d.]/g, ''));
-    return Number.isFinite(n) ? Math.round(n) : null;
+
+    const singleVal = parsePart(cleanStr);
+    return singleVal !== null ? Math.round(singleVal) : null;
 }
 
 function getOfficialDataCache() {
@@ -134,60 +173,437 @@ function setOfficialDataCache(cache) {
 }
 
 async function fetchOfficialText(url) {
-    const res = await fetch(url, { credentials: 'omit' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.text();
+    if (!url) return null;
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+    try {
+        const res = await fetch(proxyUrl);
+        if (!res.ok) return null;
+        return await res.text();
+    } catch (e) {
+        console.warn("Proxy fetch failed:", e);
+        return null;
+    }
 }
 
 async function hydrateUnitFromOfficial(unit) {
-    const slug = unit.officialPageSlug || unit.name?.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-    if (!slug) return unit;
-    const cache = getOfficialDataCache();
-    if (cache[slug]) {
-        Object.assign(unit, cache[slug]);
-        return unit;
+    if (!unit || !unit.name) return unit;
+    
+    // Automation: Always ensure image is predicted if nothing else exists
+    if (!unit.image || unit.image === "") {
+        unit.image = getUnitImageUrl(unit);
     }
 
+    const url = getOfficialUnitUrl(unit);
     try {
-        const [dbHtml, listHtml] = await Promise.all([
-            fetchOfficialText(`https://fntd2.com/database/units?=${slug}`),
-            fetchOfficialText(`https://fntd2.com/list?id=${slug}`)
-        ]);
+        const html = await fetchOfficialText(url);
+        if (!html) return unit;
+        
+        const costStr = parseOfficialStat(html, "Placement Price") || parseOfficialStat(html, "Cost");
+        const limitStr = parseOfficialStat(html, "Max Placed") || parseOfficialStat(html, "Limit");
+        
+        if (costStr) {
+            const parsedCost = parseNumberLike(costStr);
+            if (parsedCost !== null) unit.placementCost = parsedCost;
+        }
+        if (limitStr) {
+            const parsedLimit = parseInt(limitStr.replace(/[^\d]/g, ''), 10);
+            if (!isNaN(parsedLimit)) unit.placementLimit = parsedLimit;
+        }
 
-        const imageMeta = dbHtml.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
-            || dbHtml.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
-        const placementCost = parseNumberLike(parseOfficialStat(dbHtml, 'Placement Cost'));
-        const souls = parseNumberLike(parseOfficialStat(dbHtml, 'Souls')) || parseNumberLike(parseOfficialStat(listHtml, 'CURRENT VALUE'));
-        const value = parseOfficialStat(listHtml, 'CURRENT VALUE') || unit.value || 'N/A';
-        const demand = parseOfficialStat(listHtml, 'DEMAND') || unit.demand || 'N/A';
-        const status = parseOfficialStat(listHtml, 'STATUS') || unit.status || 'N/A';
+        const rarityMatch = html.match(/Rarity<\/div>\s*<div[^>]*>([^<]+)<\/div>/i);
+        if (rarityMatch) unit.rarity = rarityMatch[1].trim();
 
-        const payload = {
-            officialPageSlug: slug,
-            image: imageMeta?.[1] || unit.image || '',
-            imageSourceUrl: `https://fntd2.com/database/units?=${slug}`,
-            placementCost: placementCost ?? unit.placementCost ?? 0,
-            soulValue: souls ?? unit.soulValue ?? 0,
-            value,
-            demand,
-            status
-        };
-        Object.assign(unit, payload);
-        cache[slug] = payload;
-        setOfficialDataCache(cache);
-        return unit;
-    } catch (error) {
-        return unit;
+        const elementMatch = html.match(/Element<\/div>\s*<div[^>]*>([^<]+)<\/div>/i);
+        if (elementMatch) unit.element = elementMatch[1].trim();
+
+        const assetMatch = html.match(/rbxassetid:\/\/(\d+)/i);
+        if (assetMatch) {
+            unit.officialAssetId = assetMatch[1];
+            queueOfficialImageFetch(unit.officialAssetId);
+        } else {
+            // Try to find a meta image or main img tag if it's not a roblox asset
+            const metaImgMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+            if (metaImgMatch) {
+                unit.officialImageUrl = metaImgMatch[1];
+            } else {
+                const mainImgMatch = html.match(/src=["']([^"']+\/(?:units|database|assets)[^"']+\.(?:png|webp|jpg))["']/i);
+                if (mainImgMatch) {
+                    unit.officialImageUrl = mainImgMatch[1];
+                }
+            }
+        }
+        
+        normalizeUnitData(unit);
+    } catch (e) {
+        console.warn(`Auto-hydration failed for ${unit.name}:`, e);
     }
+    return unit;
 }
 
-async function hydrateUnitsFromOfficialSources() {
-    const targets = DB_UNITS.filter(u => !u.image || !u.soulValue || !u.placementCost);
-    if (!targets.length) return;
-    await Promise.all(targets.slice(0, 30).map(hydrateUnitFromOfficial));
+// Add auto-detection logic to the creator form
+document.getElementById('creator-name')?.addEventListener('blur', async (e) => {
+    const name = e.target.value.trim();
+    if (!name) return;
+    
+    // 1. Look for existing unit in DB first
+    const existing = DB_UNITS.find(u => u.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+        document.getElementById('creator-cost').value = existing.placementCost;
+        document.getElementById('creator-limit').value = existing.placementLimit;
+        document.getElementById('creator-element').value = existing.element;
+        document.getElementById('creator-rarity').value = existing.rarity;
+        return;
+    }
+
+    // 2. Otherwise try to hydrate from official DB (Automatic detection!)
+    const tempUnit = { name: name };
+    await hydrateUnitFromOfficial(tempUnit);
+    
+    if (tempUnit.placementCost) document.getElementById('creator-cost').value = tempUnit.placementCost;
+    if (tempUnit.placementLimit) document.getElementById('creator-limit').value = tempUnit.placementLimit;
+    if (tempUnit.element) document.getElementById('creator-element').value = tempUnit.element;
+    if (tempUnit.rarity) document.getElementById('creator-rarity').value = tempUnit.rarity;
+});
+
+function getBestUnitMatch(variantName) {
+    if (!variantName) return null;
+    
+    const sanitize = (s) => s.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanVariant = sanitize(variantName);
+    
+    // First, check for exact sanitized match
+    let exactUnit = null;
+    DB_UNITS.forEach(u => {
+        const uSanitized = sanitize(u.name);
+        const alias = UNIT_NAME_ALIASES[u.name.toLowerCase()];
+        const aliasSanitized = alias ? sanitize(alias) : '';
+        
+        if (cleanVariant === uSanitized || (aliasSanitized && cleanVariant === aliasSanitized)) {
+            exactUnit = u;
+        }
+    });
+    if (exactUnit) return exactUnit;
+
+    // Substring matching, prioritizing the longest matched name
+    let bestUnit = null;
+    let maxLength = 0;
+    DB_UNITS.forEach(u => {
+        const uSanitized = sanitize(u.name);
+        const alias = UNIT_NAME_ALIASES[u.name.toLowerCase()];
+        const aliasSanitized = alias ? sanitize(alias) : '';
+
+        let isMatch = false;
+        let matchLength = 0;
+
+        if (cleanVariant.includes(uSanitized) || uSanitized.includes(cleanVariant)) {
+            isMatch = true;
+            matchLength = uSanitized.length;
+        } else if (aliasSanitized && (cleanVariant.includes(aliasSanitized) || aliasSanitized.includes(cleanVariant))) {
+            isMatch = true;
+            matchLength = aliasSanitized.length;
+        }
+
+        if (isMatch) {
+            if (matchLength > maxLength) {
+                maxLength = matchLength;
+                bestUnit = u;
+            }
+        }
+    });
+
+    return bestUnit;
+}
+
+// Global modal state tracker
+let selectedDetailUnit = null;
+
+function openUnitDetailModal(unit) {
+    if (!unit) return;
+    selectedDetailUnit = unit;
+    
+    document.getElementById('detail-unit-name').textContent = unit.name;
+    
+    const imgNode = document.getElementById('detail-unit-image');
+    const assetId = unit.officialAssetId || '';
+    if (assetId) {
+        imgNode.setAttribute('data-unit-asset', assetId);
+    } else {
+        imgNode.removeAttribute('data-unit-asset');
+    }
+    imgNode.style.backgroundImage = `url('${getUnitImageUrl(unit)}')`;
+    
+    // Setup variant picker options
+    const picker = document.getElementById('detail-variant-picker');
+    picker.innerHTML = '';
+    if (unit.allVariants && unit.allVariants.length > 1) {
+        unit.allVariants.forEach((v, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            // Format nice human option names, e.g. standard vs cosmetics
+            const cleanVal = '';
+            option.textContent = `${v.name}${cleanVal}`;
+            if (v.name === unit.activeVariantName) {
+                option.selected = true;
+            }
+            picker.appendChild(option);
+        });
+        picker.parentElement.style.display = 'block';
+    } else {
+        picker.parentElement.style.display = 'none';
+    }
+    
+    renderDetailStatsList(unit);
+    
+    document.getElementById('unit-detail-overlay').style.display = 'flex';
+}
+
+function renderDetailStatsList(unit) {
+    const list = document.getElementById('detail-stats-list');
+    const canonStatus = unit.canon === false 
+        ? `<span style="color:#ffd700; font-weight:bold; letter-spacing:0.5px;">Unofficial Fan Concept</span>` 
+        : `Official FNTD2 Unit`;
+    
+    list.innerHTML = `
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Type:</span><strong>${canonStatus}</strong></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Rarity:</span><span style="font-weight:700;" class="t-badge rarity-${(unit.rarity || '').replace(/\s+/g,'-')}">${unit.rarity || 'Common'}</span></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Element:</span><strong>${unit.element || 'Neutral'}</strong></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Placement Cost:</span><strong>$${unit.placementCost || 0}</strong></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Placement Limit:</span><strong>${unit.placementLimit || 5}</strong></div>
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Trend Status:</span><span style="font-weight:700;">${unit.status || 'Stable'}</span></div>
+        
+        <div style="border-top: 1px solid var(--border-matrix); margin: 8px 0; padding-top: 8px;"></div>
+        
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Endless Rank:</span><span style="color:var(--color-accent-blue); font-weight:700;">${unit.endlessRank || 'N/A'}</span></div>
+        <div class="tt-line tt-placement"><span style="color:var(--text-body-muted)">Placement:</span><span>#${unit.endlessPlacement || 'N/A'}</span></div>
+        
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Synergy Rank:</span><span>${unit.synergyRank || 'N/A'}</span></div>
+        <div class="tt-line tt-placement"><span style="color:var(--text-body-muted)">Placement:</span><span>#${unit.synergyPlacement || 'N/A'}</span></div>
+        
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Obtainability Rank:</span><span>${unit.obtainabilityRank || 'N/A'}</span></div>
+        <div class="tt-line tt-placement"><span style="color:var(--text-body-muted)">Placement:</span><span>#${unit.obtainabilityPlacement || 'N/A'}</span></div>
+        
+        <div class="tt-line"><span style="color:var(--text-body-muted)">Overall Rank:</span><span>${unit.overallRank || 'N/A'}</span></div>
+    `;
+}
+
+function applySelectedVariant() {
+    if (!selectedDetailUnit || !selectedDetailUnit.allVariants) return;
+    const index = parseInt(document.getElementById('detail-variant-picker').value, 10);
+    const v = selectedDetailUnit.allVariants[index];
+    if (!v) return;
+    
+    // Mutate state with selected cosmetic variant details
+    selectedDetailUnit.activeVariantName = v.name;
+    selectedDetailUnit.placementCost = v.placementCost;
+    selectedDetailUnit.placementLimit = v.placementLimit;
+    selectedDetailUnit.rarity = v.rarity;
+    selectedDetailUnit.element = v.element;
+    selectedDetailUnit.synergy = v.element;
+    selectedDetailUnit.status = v.status;
+    selectedDetailUnit.officialAssetId = v.officialAssetId || '';
+    if (v.image) {
+        selectedDetailUnit.image = v.image;
+    } else {
+        selectedDetailUnit.image = '';
+    }
+    
+    // Save to localStorage so chosen cosmetic preferences persist across sessions and exports
+    const savedSelections = JSON.parse(localStorage.getItem('fntd2_selected_variants') || '{}');
+    savedSelections[selectedDetailUnit.id] = v.name;
+    localStorage.setItem('fntd2_selected_variants', JSON.stringify(savedSelections));
+    
+    // Instantly update visual nodes
+    const imgNode = document.getElementById('detail-unit-image');
+    if (selectedDetailUnit.officialAssetId) {
+        imgNode.setAttribute('data-unit-asset', selectedDetailUnit.officialAssetId);
+    } else {
+        imgNode.removeAttribute('data-unit-asset');
+    }
+    imgNode.style.backgroundImage = `url('${getUnitImageUrl(selectedDetailUnit)}')`;
+    renderDetailStatsList(selectedDetailUnit);
+    
     renderTierlist();
     renderManualBuilderPool();
     renderTeamUnitSelector();
+    renderTradeUnitSelector();
+    renderTeamSlotGrid();
+    updateTeamRatingPanel();
+}
+
+function closeUnitDetailModal() {
+    document.getElementById('unit-detail-overlay').style.display = 'none';
+    selectedDetailUnit = null;
+}
+
+function visitDetailOfficialPage() {
+    if (!selectedDetailUnit) return;
+    const url = getOfficialUnitUrl(selectedDetailUnit);
+    window.open(url, '_blank', 'noopener');
+}
+
+async function hydrateUnitsFromOfficialSources() {
+    // Render initially using current high-contrast local dataset
+    renderTierlist();
+    renderManualBuilderPool();
+    renderTeamUnitSelector();
+    renderTradeUnitSelector();
+
+    try {
+        console.log("Synchronising database with live fntd2.com datasets via full-stack proxies...");
+        const [allUnitsRaw, wikiDataRaw] = await Promise.all([
+            fetchOfficialText("https://fntd2.com/all_units.json"),
+            fetchOfficialText("https://fntd2.com/wiki_data.json")
+        ]);
+
+        const allUnitsMap = JSON.parse(allUnitsRaw);
+        const wikiDataMap = JSON.parse(wikiDataRaw);
+
+        const allUnitsArray = Object.values(allUnitsMap || {});
+        let wikiUnitsArray = [];
+        if (wikiDataMap && wikiDataMap.data) {
+            wikiUnitsArray = typeof wikiDataMap.data === "object" ? Object.values(wikiDataMap.data) : wikiDataMap.data;
+        }
+
+        // Initialize empty variants list for each unit
+        DB_UNITS.forEach(localUnit => {
+            localUnit.allVariants = [{
+                name: localUnit.name,
+                rarity: localUnit.rarity || 'Common',
+                placementCost: localUnit.placementCost || 0,
+                placementLimit: localUnit.placementLimit || 5,
+                element: localUnit.element || 'Neutral',
+                status: localUnit.status || 'Stable',
+                image: localUnit.image || '',
+                officialAssetId: '',
+                isBase: true
+            }];
+        });
+
+        // Merge all matching units and cosmetics from wiki_data.json
+        wikiUnitsArray.forEach(wikiItem => {
+            if (!wikiItem.name) return;
+            if (wikiItem.rarity === 'Cosmetic' || wikiItem.rarity === 'Item' || wikiItem.rarity === 'Skin') return;
+            const bestUnit = getBestUnitMatch(wikiItem.name);
+            if (bestUnit) {
+                const placementPrice = wikiItem.placementPrice || (wikiItem.baseStats?.placementPrice || 0);
+                const placementLimit = wikiItem.maxPlaced || 5;
+                const rarity = wikiItem.rarity || 'Common';
+                const el = wikiItem.element || 'Neutral';
+                let assetId = '';
+                if (wikiItem.image && typeof wikiItem.image === 'string') {
+                    const match = wikiItem.image.match(/rbxassetid:\/\/(\d+)/i);
+                    if (match) assetId = match[1];
+                }
+
+                let v = bestUnit.allVariants.find(x => {
+                    const xL = x.name.toLowerCase();
+                    const wikiL = wikiItem.name.toLowerCase();
+                    return xL === wikiL || (UNIT_NAME_ALIASES[xL] === wikiL);
+                });
+                if (!v) {
+                    const isBase = wikiItem.name.toLowerCase() === bestUnit.name.toLowerCase() || 
+                        (UNIT_NAME_ALIASES[bestUnit.name.toLowerCase()] === wikiItem.name.toLowerCase());
+                    v = {
+                        name: wikiItem.name,
+                        rarity: rarity,
+                        placementCost: placementPrice,
+                        placementLimit: placementLimit,
+                        element: el,
+                        status: 'Stable',
+                        image: wikiItem.image || '',
+                        officialAssetId: assetId,
+                        isBase: isBase
+                    };
+                    bestUnit.allVariants.push(v);
+                } else {
+                    v.rarity = rarity;
+                    v.placementCost = placementPrice;
+                    v.placementLimit = placementLimit;
+                    v.element = el;
+                    if (wikiItem.image) v.image = wikiItem.image;
+                    if (assetId) v.officialAssetId = assetId;
+                }
+            }
+        });
+
+        // Merge all matching units and cosmetics from all_units.json
+        allUnitsArray.forEach(valItem => {
+            if (!valItem.baseText) return;
+            if (valItem.rarity === 'Cosmetic' || valItem.rarity === 'Item' || valItem.rarity === 'Skin') return;
+            const bestUnit = getBestUnitMatch(valItem.baseText);
+            if (bestUnit && valItem.variants && Array.isArray(valItem.variants)) {
+                valItem.variants.forEach(variantData => {
+                    const status = variantData.state || 'Stable';
+                    const img = variantData.image ? "https://drive.google.com/thumbnail?id=" + variantData.image : '';
+                    const variantName = variantData.name || valItem.baseText;
+
+                    let v = bestUnit.allVariants.find(x => {
+                        const xL = x.name.toLowerCase();
+                        const varNameL = variantName.toLowerCase();
+                        return xL === varNameL || (UNIT_NAME_ALIASES[xL] === varNameL);
+                    });
+                    if (!v) {
+                        const isBase = variantName.toLowerCase() === bestUnit.name.toLowerCase() || 
+                            (UNIT_NAME_ALIASES[bestUnit.name.toLowerCase()] === variantName.toLowerCase());
+                        v = {
+                            name: variantName,
+                            rarity: 'Common',
+                            placementCost: 0,
+                            placementLimit: 5,
+                            element: 'Neutral',
+                            status: status,
+                            image: img,
+                            officialAssetId: '',
+                            isBase: isBase
+                        };
+                        bestUnit.allVariants.push(v);
+                    } else {
+                        v.status = status;
+                        if (img) v.image = img;
+                    }
+                });
+            }
+        });
+
+        // Restore active selection from localStorage and apply
+        const savedSelections = JSON.parse(localStorage.getItem('fntd2_selected_variants') || '{}');
+        DB_UNITS.forEach(localUnit => {
+            let activeVariant = localUnit.allVariants?.find(v => v.isBase) || localUnit.allVariants?.[0];
+            const savedName = savedSelections[localUnit.id];
+            if (savedName && localUnit.allVariants) {
+                const found = localUnit.allVariants.find(v => v.name === savedName);
+                if (found) {
+                    activeVariant = found;
+                }
+            }
+
+            if (activeVariant) {
+                localUnit.activeVariantName = activeVariant.name;
+                localUnit.placementCost = activeVariant.placementCost;
+                localUnit.placementLimit = activeVariant.placementLimit;
+                localUnit.rarity = activeVariant.rarity;
+                localUnit.element = activeVariant.element;
+                localUnit.synergy = activeVariant.element;
+                localUnit.status = activeVariant.status;
+                localUnit.officialAssetId = activeVariant.officialAssetId || '';
+                if (activeVariant.image) {
+                    localUnit.image = activeVariant.image;
+                }
+            }
+        });
+
+        if (typeof assignDynamicRankSubTiers === "function") {
+            assignDynamicRankSubTiers();
+        }
+
+        console.log("Database synchronisation complete! Rerendering system visual modules.");
+        renderTierlist();
+        renderManualBuilderPool();
+        renderTeamUnitSelector();
+        renderTradeUnitSelector();
+    } catch (e) {
+        console.warn("Could not synchronize live data. Using shipped static local database.", e);
+    }
 }
 
 function normalizeRankValue(value) {
@@ -218,9 +634,14 @@ function scoreToRankLetter(score) {
 }
 
 function computeOverallRank(unit) {
+    // If a manual overall rank is provided via creator or DB, we trust it primarily
+    if (unit.manualOverallRank) {
+        unit.overallRank = normalizeRankValue(unit.manualOverallRank);
+        return;
+    }
+
     const values = [
         normalizeRankValue(unit.endlessRank),
-        normalizeRankValue(unit.synergyRank),
         normalizeRankValue(unit.obtainabilityRank),
         normalizeRankValue(unit.personalRank?.value)
     ]
@@ -228,26 +649,32 @@ function computeOverallRank(unit) {
         .filter(score => score !== null);
 
     if (values.length === 0) {
-        unit.overallRank = 'N/A';
-        unit.overallRankScore = null;
+        unit.overallRank = unit.overallRank || 'N/A';
         return;
     }
 
     const average = values.reduce((sum, item) => sum + item, 0) / values.length;
-    unit.overallRankScore = Number(average.toFixed(2));
     unit.overallRank = scoreToRankLetter(average);
 }
 
 function normalizeUnitData(unit) {
     if (!unit) return;
-    unit.endlessRank = normalizeRankValue(unit.endlessRank || unit.rank || 'N/A');
-    unit.endlessPlacement = unit.endlessPlacement || unit.rankedId || 'N/A';
-    unit.synergyRank = normalizeRankValue(unit.synergyRank || unit.rank || 'N/A');
+    
+    // Auto-generate official page slug if missing
+    if (unit.name && !unit.officialPageSlug) {
+        unit.officialPageSlug = unit.name.trim().toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+    }
+
+    unit.endlessRank = normalizeRankValue(unit.endlessRank || 'N/A');
+    unit.endlessPlacement = unit.endlessPlacement || '0';
+    unit.synergyRank = normalizeRankValue(unit.synergyRank || 'N/A');
     unit.synergyPlacement = unit.synergyPlacement || 'N/A';
-    unit.obtainabilityRank = normalizeRankValue(unit.obtainabilityRank || unit.rank || 'N/A');
+    unit.obtainabilityRank = normalizeRankValue(unit.obtainabilityRank || 'N/A');
     unit.obtainabilityPlacement = unit.obtainabilityPlacement || 'N/A';
 
-    const personalText = unit.personalRank?.value || unit.personalRank || unit.rank || 'N/A';
+    const personalText = unit.personalRank?.value || unit.personalRank || 'N/A';
     const personalNote = unit.personalRank?.note || unit.personalRankNote || 'No personal note provided.';
     unit.personalRank = {
         value: normalizeRankValue(personalText),
@@ -259,6 +686,8 @@ function normalizeUnitData(unit) {
 
 function normalizeAllUnitData() {
     if (!Array.isArray(DB_UNITS)) return;
+
+    // Run basic normalization and overall rank calculations
     DB_UNITS.forEach(normalizeUnitData);
 }
 
@@ -274,21 +703,25 @@ let simulatedEnchant = "None";
 let isShinyModeActive = false;
 const PAGE_PATH_MAP = {
     "": "page-home",
-    "index.html": "page-home",
     "home": "page-home",
     "tierlist": "page-tierlist",
     "generator": "page-generator",
-    "codex": "page-codex",
     "profile": "page-profile",
     "team": "page-generator",
     "trade": "page-generator",
     "units": "page-tierlist",
     "database": "page-tierlist",
-    "enemies": "page-codex",
     "tos": "page-tos",
     "privacy": "page-privacy"
 };
-const PAGE_ID_TO_PATH = Object.fromEntries(Object.entries(PAGE_PATH_MAP).map(([path, pageId]) => [pageId, path]));
+const PAGE_ID_TO_PATH = {
+    "page-home": "home",
+    "page-tierlist": "tierlist",
+    "page-generator": "generator",
+    "page-profile": "profile",
+    "page-tos": "tos",
+    "page-privacy": "privacy"
+};
 
 function getActiveTeam() {
     return teamSlots.filter(Boolean);
@@ -301,11 +734,6 @@ function syncCurrentTeamWithSlots() {
 function clearTeamSlots() {
     teamSlots = Array(6).fill(null);
     syncCurrentTeamWithSlots();
-}
-
-function getPageIdFromPath(path) {
-    const normalized = path.replace(/\\/g, '/').split('/').filter(Boolean).pop() || '';
-    return PAGE_PATH_MAP[normalized] || 'page-home';
 }
 
 function updateActiveNav(pageId) {
@@ -321,17 +749,18 @@ function navigateToPage(pageId, replace = false) {
     targetPage.classList.add('active');
     updateActiveNav(pageId);
 
-    const segment = PAGE_ID_TO_PATH[pageId] || '';
-    const url = segment ? `/${segment}` : '/';
+    const segment = PAGE_ID_TO_PATH[pageId] || "home";
+    const hash = `#${segment}`;
     if (replace) {
-        history.replaceState({ pageId }, '', url);
+        history.replaceState({ pageId }, '', hash);
     } else {
-        history.pushState({ pageId }, '', url);
+        history.pushState({ pageId }, '', hash);
     }
 }
 
 function handleRoute() {
-    const pageId = getPageIdFromPath(window.location.pathname);
+    const hashStr = window.location.hash.replace(/^#/, '');
+    const pageId = PAGE_PATH_MAP[hashStr] || 'page-home';
     navigateToPage(pageId, true);
 }
 
@@ -341,8 +770,7 @@ function openTeamUnitSelector(slotIndex) {
     if (label) label.textContent = slotIndex + 1;
     const selector = document.getElementById('team-unit-selector');
     if (selector) {
-        selector.classList.remove('hidden');
-        selector.classList.add('active-view');
+        selector.style.display = 'flex';
     }
     renderTeamUnitSelector();
 }
@@ -351,8 +779,7 @@ function closeTeamUnitSelector() {
     activeTeamSlotIndex = null;
     const selector = document.getElementById('team-unit-selector');
     if (selector) {
-        selector.classList.remove('active-view');
-        selector.classList.add('hidden');
+        selector.style.display = 'none';
     }
 }
 
@@ -380,25 +807,40 @@ function renderTeamUnitSelector() {
     const classFilter = document.getElementById('team-selector-class-filter')?.value || 'All';
     const subclassFilter = document.getElementById('team-selector-subclass-filter')?.value || 'All';
 
+    const hideNonCanon = document.getElementById('setting-hide-non-canon')?.checked ?? false;
     const availableUnits = DB_UNITS.filter(unit => {
+        if (hideNonCanon && unit.canon === false) return false;
         const alreadySelected = teamSlots.some(slot => slot?.id === unit.id);
         const matchesSearch = unit.name.toLowerCase().includes(searchTerm) || unit.id.toLowerCase().includes(searchTerm);
         const matchesClass = classFilter === 'All' || unit.class === classFilter;
-        const matchesSubclass = subclassFilter === 'All' || unit.subclasses.includes(subclassFilter);
+        const subclasses = Array.isArray(unit.subclasses) ? unit.subclasses : [];
+        const matchesSubclass = subclassFilter === 'All' || subclasses.includes(subclassFilter);
         return !alreadySelected && matchesSearch && matchesClass && matchesSubclass;
     });
 
-    list.innerHTML = availableUnits.map(unit => {
-        const assetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name] || '';
-        const assetAttr = assetId ? ` data-unit-asset="${assetId}"` : '';
-        return `
-        <div class="unit-card-square animate-pop rarity-${unit.rarity.replace(/\s+/g,'-')}" data-unit-id="${unit.id}"${assetAttr} style="background-image: url('${getUnitImageUrl(unit)}'), none;" onclick="setTeamSlotUnit('${unit.id}')">
+    list.innerHTML = '';
+    if (availableUnits.length === 0) {
+        list.innerHTML = `<div style="color:var(--text-body-muted); padding:18px; font-size:13px;">No matching units found.</div>`;
+        return;
+    }
+
+    availableUnits.forEach(unit => {
+        const card = document.createElement('div');
+        card.className = 'unit-card-square animate-pop rarity-' + (unit.rarity || '').replace(/\s+/g,'-');
+        card.dataset.unitId = unit.id;
+        const assetId = unit.officialAssetId;
+        if (assetId) card.dataset.unitAsset = assetId;
+        
+        applyRarityCardStyle(card, unit);
+
+        card.innerHTML = `
             <div class="square-title-top">${unit.name}</div>
             <div class="square-cost-bottom">$${unit.placementCost}</div>
             <div class="square-element-icon">${unit.element.substring(0,1).toUpperCase()}</div>
-        </div>
-    `;
-    }).join('');
+        `;
+        card.addEventListener('click', () => setTeamSlotUnit(unit.id));
+        list.appendChild(card);
+    });
 }
 
 function setTeamSlotUnit(unitId) {
@@ -412,7 +854,7 @@ function setTeamSlotUnit(unitId) {
     teamSlots[activeTeamSlotIndex] = unit;
     syncCurrentTeamWithSlots();
     renderTeamSlotGrid();
-    renderGridContainer([], 'generator-grid-container');
+    renderGridContainer(currentTeam, 'generator-grid-container');
     renderManualBuilderPool();
     updateTeamRatingPanel();
     closeTeamUnitSelector();
@@ -440,8 +882,7 @@ function openTradeUnitSelector(side) {
     if (sideLabel) sideLabel.textContent = side === 'offer' ? 'your offer' : 'their offer';
     const selector = document.getElementById('trade-unit-selector');
     if (selector) {
-        selector.classList.remove('hidden');
-        selector.classList.add('active-view');
+        selector.style.display = 'flex';
     }
     renderTradeUnitSelector();
 }
@@ -450,8 +891,7 @@ function closeTradeUnitSelector() {
     tradeSelectorSide = null;
     const selector = document.getElementById('trade-unit-selector');
     if (selector) {
-        selector.classList.remove('active-view');
-        selector.classList.add('hidden');
+        selector.style.display = 'none';
     }
 }
 
@@ -464,25 +904,40 @@ function renderTradeUnitSelector() {
 
     const allSelectedIds = new Set([...tradeOfferUnits, ...tradeWantUnits].map(u => u.id));
 
+    const hideNonCanon = document.getElementById('setting-hide-non-canon')?.checked ?? false;
     const availableUnits = DB_UNITS.filter(unit => {
+        if (hideNonCanon && unit.canon === false) return false;
         const alreadySelected = allSelectedIds.has(unit.id);
         const matchesSearch = unit.name.toLowerCase().includes(searchTerm) || unit.id.toLowerCase().includes(searchTerm);
         const matchesClass = classFilter === 'All' || unit.class === classFilter;
-        const matchesSubclass = subclassFilter === 'All' || unit.subclasses.includes(subclassFilter);
+        const subclasses = Array.isArray(unit.subclasses) ? unit.subclasses : [];
+        const matchesSubclass = subclassFilter === 'All' || subclasses.includes(subclassFilter);
         return !alreadySelected && matchesSearch && matchesClass && matchesSubclass;
     });
 
-    list.innerHTML = availableUnits.map(unit => {
-        const assetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name] || '';
-        const assetAttr = assetId ? ` data-unit-asset="${assetId}"` : '';
-        return `
-        <div class="unit-card-square animate-pop rarity-${unit.rarity.replace(/\s+/g,'-')}" data-unit-id="${unit.id}"${assetAttr} style="background-image: url('${getUnitImageUrl(unit)}'), none;" onclick="selectTradeUnit('${unit.id}')">
+    list.innerHTML = '';
+    if (availableUnits.length === 0) {
+        list.innerHTML = `<div style="color:var(--text-body-muted); padding:18px; font-size:13px;">No matching units found.</div>`;
+        return;
+    }
+
+    availableUnits.forEach(unit => {
+        const card = document.createElement('div');
+        card.className = 'unit-card-square animate-pop rarity-' + (unit.rarity || '').replace(/\s+/g,'-');
+        card.dataset.unitId = unit.id;
+        const assetId = unit.officialAssetId;
+        if (assetId) card.dataset.unitAsset = assetId;
+        
+        applyRarityCardStyle(card, unit);
+
+        card.innerHTML = `
             <div class="square-title-top">${unit.name}</div>
             <div class="square-cost-bottom">$${unit.placementCost}</div>
             <div class="square-element-icon">${unit.element.substring(0,1).toUpperCase()}</div>
-        </div>
-    `;
-    }).join('');
+        `;
+        card.addEventListener('click', () => selectTradeUnit(unit.id));
+        list.appendChild(card);
+    });
 }
 
 function selectTradeUnit(unitId) {
@@ -529,33 +984,22 @@ function renderTradeCreateSelections() {
 function resetTradeCreateForm() {
     tradeOfferUnits = [];
     tradeWantUnits = [];
-    if (document.getElementById('trade-offer-souls')) document.getElementById('trade-offer-souls').value = '0';
-    if (document.getElementById('trade-want-souls')) document.getElementById('trade-want-souls').value = '0';
     renderTradeCreateSelections();
 }
 
 function migrateObtainmentsFormat() {
     DB_UNITS.forEach(unit => {
-            if (typeof unit.obtainments === 'string') {
+        if (typeof unit.obtainments === 'string') {
             unit.obtainments = [
                 { source: "Legacy", chance: 100, method: unit.obtainments }
             ];
         }
-
-        if (!unit.aliases) {
-            unit.aliases = [];
-        }
-        if (!unit.fanmadeBuffs) {
-            unit.fanmadeBuffs = [];
-        }
-        if (!unit.subUnits) {
-            unit.subUnits = [];
-        }
+        if (!unit.aliases) unit.aliases = [];
+        if (!unit.fanmadeBuffs) unit.fanmadeBuffs = [];
+        if (!unit.subUnits) unit.subUnits = [];
     });
 }
 
-
- 
 function getDeletedUnitIds() {
     try {
         const stored = JSON.parse(localStorage.getItem(DELETED_UNITS_KEY) || '[]');
@@ -608,14 +1052,13 @@ function loadCustomUnitsFromStorage() {
 
 function regenerateComputedRanks() {
     ALL_RANKS.forEach(rankKey => {
-        const bucket = DB_UNITS.filter(u => u.rank === rankKey);
+        const bucket = DB_UNITS.filter(u => u.rank === rankKey || u.endlessRank === rankKey);
         if (bucket.length === 0) return;
         bucket.sort((a, b) => (Number(a.rankedId) || 0) - (Number(b.rankedId) || 0));
         const total = bucket.length;
         const slice = Math.max(1, Math.floor(total * 0.33));
 
         bucket.forEach((unit, idx) => {
-            if (!unit.rank) return;
             if (idx < slice) unit.computedRank = `High ${rankKey}`;
             else if (idx >= total - slice) unit.computedRank = `Low ${rankKey}`;
             else unit.computedRank = `Mid ${rankKey}`;
@@ -648,26 +1091,22 @@ function applyConfigBindings() {
 
     if (CONFIG.BACKGROUND_ASSETS) {
         const root = document.documentElement;
-        // Background Asset Paths
         if (CONFIG.BACKGROUND_ASSETS.CACTUS_LEFT) root.style.setProperty('--cactus-left-img', `url('${CONFIG.BACKGROUND_ASSETS.CACTUS_LEFT}')`);
         if (CONFIG.BACKGROUND_ASSETS.CACTUS_RIGHT) root.style.setProperty('--cactus-right-img', `url('${CONFIG.BACKGROUND_ASSETS.CACTUS_RIGHT}')`);
         if (CONFIG.BACKGROUND_ASSETS.HOUSE_1) root.style.setProperty('--house1-img', `url('${CONFIG.BACKGROUND_ASSETS.HOUSE_1}')`);
         if (CONFIG.BACKGROUND_ASSETS.HOUSE_2) root.style.setProperty('--house2-img', `url('${CONFIG.BACKGROUND_ASSETS.HOUSE_2}')`);
         if (CONFIG.BACKGROUND_ASSETS.JUMPING_CUBE) root.style.setProperty('--jumping-cube-img', `url('${CONFIG.BACKGROUND_ASSETS.JUMPING_CUBE}')`);
         
-        // Animation & Position Properties
         if (CONFIG.BACKGROUND_ASSETS.JUMPING_SPEED) {
             root.style.setProperty('--jumping-speed', CONFIG.BACKGROUND_ASSETS.JUMPING_SPEED);
             root.style.setProperty('--tumbleweed-speed', CONFIG.BACKGROUND_ASSETS.JUMPING_SPEED);
         }
         if (CONFIG.BACKGROUND_ASSETS.JUMP_HEIGHT) root.style.setProperty('--jump-height', CONFIG.BACKGROUND_ASSETS.JUMP_HEIGHT);
         
-        // Sky & Sunset Colors
         if (CONFIG.BACKGROUND_ASSETS.SKY_COLOR) root.style.setProperty('--sky-color', CONFIG.BACKGROUND_ASSETS.SKY_COLOR);
         if (CONFIG.BACKGROUND_ASSETS.SKY_GRADIENT_START) root.style.setProperty('--sky-gradient-start', CONFIG.BACKGROUND_ASSETS.SKY_GRADIENT_START);
         if (CONFIG.BACKGROUND_ASSETS.SKY_GRADIENT_END) root.style.setProperty('--sky-gradient-end', CONFIG.BACKGROUND_ASSETS.SKY_GRADIENT_END);
         
-        // Sun Configuration
         if (CONFIG.BACKGROUND_ASSETS.SUN_COLOR) root.style.setProperty('--sun-color', CONFIG.BACKGROUND_ASSETS.SUN_COLOR);
         if (CONFIG.BACKGROUND_ASSETS.SUN_SIZE) root.style.setProperty('--sun-size', CONFIG.BACKGROUND_ASSETS.SUN_SIZE);
         if (CONFIG.BACKGROUND_ASSETS.SUN_POSITION_BOTTOM) root.style.setProperty('--sun-position-bottom', CONFIG.BACKGROUND_ASSETS.SUN_POSITION_BOTTOM);
@@ -675,12 +1114,10 @@ function applyConfigBindings() {
         if (CONFIG.BACKGROUND_ASSETS.SUN_BLUR_GLOW) root.style.setProperty('--sun-blur-glow', CONFIG.BACKGROUND_ASSETS.SUN_BLUR_GLOW);
         if (CONFIG.BACKGROUND_ASSETS.SUN_ANIMATION_SPEED) root.style.setProperty('--sun-animation-speed', CONFIG.BACKGROUND_ASSETS.SUN_ANIMATION_SPEED);
         
-        // Ground & Terrain
         if (CONFIG.BACKGROUND_ASSETS.GROUND_COLOR) root.style.setProperty('--ground-color', CONFIG.BACKGROUND_ASSETS.GROUND_COLOR);
         if (CONFIG.BACKGROUND_ASSETS.GROUND_HEIGHT) root.style.setProperty('--ground-height', CONFIG.BACKGROUND_ASSETS.GROUND_HEIGHT);
         if (CONFIG.BACKGROUND_ASSETS.GROUND_BORDER_COLOR) root.style.setProperty('--ground-border-color', CONFIG.BACKGROUND_ASSETS.GROUND_BORDER_COLOR);
         
-        // Element Position Overrides
         if (CONFIG.BACKGROUND_ASSETS.CACTUS_LEFT_BOTTOM) root.style.setProperty('--cactus-left-bottom', CONFIG.BACKGROUND_ASSETS.CACTUS_LEFT_BOTTOM);
         if (CONFIG.BACKGROUND_ASSETS.CACTUS_LEFT_2_BOTTOM) root.style.setProperty('--cactus-left-2-bottom', CONFIG.BACKGROUND_ASSETS.CACTUS_LEFT_2_BOTTOM);
         if (CONFIG.BACKGROUND_ASSETS.CACTUS_RIGHT_BOTTOM) root.style.setProperty('--cactus-right-bottom', CONFIG.BACKGROUND_ASSETS.CACTUS_RIGHT_BOTTOM);
@@ -719,7 +1156,6 @@ document.addEventListener("DOMContentLoaded", () => {
     initProfileAndTrading();
     buildFilterCheckboxLayouts();
     renderTierlist();
-    renderEnemyCodex();
     renderManualBuilderPool();
     renderTeamSlotGrid();
     switchTeamCreatorTab('generate');
@@ -728,11 +1164,11 @@ document.addEventListener("DOMContentLoaded", () => {
     initBulletHoleFx();
     hydrateUnitsFromOfficialSources();
     handleRoute();
+    window.addEventListener('hashchange', handleRoute);
     window.addEventListener('popstate', handleRoute);
     initWelcomeModal();
 });
 
- 
 function initViewRoutingNavs() {
     document.querySelectorAll('.sidebar .nav-btn').forEach(btn => {
         btn.addEventListener('click', (event) => {
@@ -746,12 +1182,7 @@ function initViewRoutingNavs() {
 }
 
 function switchView(targetPageId) {
-    document.querySelectorAll('.sidebar .nav-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    
-    document.getElementById(targetPageId).classList.add('active');
-    const sideBtn = document.querySelector(`.sidebar .nav-btn[data-target="${targetPageId}"]`);
-    if(sideBtn) sideBtn.classList.add('active');
+    navigateToPage(targetPageId);
 }
 
 function getSavedProfile() {
@@ -797,7 +1228,7 @@ function parseAuthRedirect() {
 }
 
 function openRobloxAuth() {
-    const oauthUrl = CONFIG.LINKS.ROBLOX_OAUTH_URL || 'https://your-cloudflare-domain.com/auth/roblox';
+    const oauthUrl = CONFIG.LINKS.ROBLOX_OAUTH_URL || 'https://api.fntddata.com/auth/roblox';
     const redirect = encodeURIComponent(window.location.origin + window.location.pathname);
     window.location.href = `${oauthUrl}?redirect_uri=${redirect}`;
 }
@@ -907,8 +1338,8 @@ function renderTradeOfferCard(offer, index, profile) {
     return `
         <div class="trade-offer-card">
             <div class="trade-card-row"><strong>${CONFIG.getText('TRADING.OFFER_OWNER')}</strong><span>${offer.ownerName}</span></div>
-            <div class="trade-card-row"><strong>${CONFIG.getText('TRADING.OFFER_YOUR_OFFER')}</strong><span>${offerUnitsHtml}${offer.offerSouls ? `<div class="trade-souls-tag">+ ${offer.offerSouls} souls</div>` : ''}</span></div>
-            <div class="trade-card-row"><strong>${CONFIG.getText('TRADING.OFFER_THEIR_OFFER')}</strong><span>${wantUnitsHtml}${offer.wantSouls ? `<div class="trade-souls-tag">+ ${offer.wantSouls} souls</div>` : ''}</span></div>
+            <div class="trade-card-row"><strong>${CONFIG.getText('TRADING.OFFER_YOUR_OFFER')}</strong><span>${offerUnitsHtml}</span></div>
+            <div class="trade-card-row"><strong>${CONFIG.getText('TRADING.OFFER_THEIR_OFFER')}</strong><span>${wantUnitsHtml}</span></div>
             <div class="trade-card-footer"><small>${new Date(offer.createdAt).toLocaleString()}</small>${deleteButton}</div>
         </div>
     `;
@@ -960,14 +1391,14 @@ function createTradeOffer() {
         return;
     }
 
-    const offerSouls = parseInt(document.getElementById('trade-offer-souls')?.value, 10) || 0;
-    const wantSouls = parseInt(document.getElementById('trade-want-souls')?.value, 10) || 0;
+    const offerSouls = 0;
+    const wantSouls = 0;
 
     const newOffer = {
         offerUnits: tradeOfferUnits.map(unit => ({ id: unit.id, name: unit.name })),
         wantUnits: tradeWantUnits.map(unit => ({ id: unit.id, name: unit.name })),
-        offerSouls,
-        wantSouls,
+        offerSouls: 0,
+        wantSouls: 0,
         ownerId: profile.robloxId,
         ownerName: profile.robloxName,
         createdAt: new Date().toISOString(),
@@ -979,20 +1410,6 @@ function createTradeOffer() {
     renderTradeOffers();
     resetTradeCreateForm();
     alert(CONFIG.getText('TRADING.TRADE_CREATED'));
-
-    const apiUrl = CONFIG.LINKS.TRADE_API_URL;
-    if (apiUrl && apiUrl.includes('http')) {
-        fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${profile.token}`,
-            },
-            body: JSON.stringify(newOffer),
-        }).catch(() => {
-            // Leave local store as fallback if API call is unavailable.
-        });
-    }
 }
 
 function initProfileAndTrading() {
@@ -1003,7 +1420,6 @@ function initProfileAndTrading() {
     renderTradeOffers();
 }
 
- 
 function buildFilterCheckboxLayouts() {
     const rBox = document.getElementById('finder-rarities-box');
     if (rBox) {
@@ -1082,6 +1498,19 @@ function buildFilterCheckboxLayouts() {
         });
     }
 
+    const tradeClassFilter = document.getElementById('trade-selector-class-filter');
+    if (tradeClassFilter) {
+        ALL_CLASSES.forEach(c => {
+            tradeClassFilter.innerHTML += `<option value="${c}">${c}</option>`;
+        });
+    }
+    const tradeSubclassFilter = document.getElementById('trade-selector-subclass-filter');
+    if (tradeSubclassFilter) {
+        ALL_SUBCLASSES.forEach(s => {
+            tradeSubclassFilter.innerHTML += `<option value="${s}">${s}</option>`;
+        });
+    }
+
     const tEl = document.getElementById('tier-filter-element');
     if (tEl) {
         Object.keys(DB_ELEMENTS).forEach(e => tEl.innerHTML += `<option value="${e}">${e}</option>`);
@@ -1117,7 +1546,10 @@ function updateTierlistSubclassOptions() {
     if (!tCl || !tSb) return;
     const classValue = tCl.value;
     const source = classValue === 'All' ? DB_UNITS : DB_UNITS.filter(u => u.class === classValue);
-    const subclassSet = new Set(source.flatMap(u => u.subclasses || []));
+    const subclassSet = new Set(source.flatMap(u => {
+        const subList = Array.isArray(u.subclasses) ? u.subclasses : [];
+        return subList;
+    }));
     tSb.innerHTML = '<option value="All">All Subclasses</option>';
     Array.from(subclassSet).forEach(sub => {
         tSb.innerHTML += `<option value="${sub}">${sub}</option>`;
@@ -1145,9 +1577,11 @@ function getTierlistDescriptor(classValue, subclassValue, rankType, rankValue) {
 function updateTierlistExplanationText(classValue, subclassValue, rankType, rankValue) {
     const panel = document.querySelector('.tierlist-note-panel');
     if (!panel) return;
-    const lines = classValue && subclassValue
-        ? getTierlistDescriptor(classValue, subclassValue, rankType, rankValue)
-        : ['Pick a class and subclass to review ranks and placements for that unit group.'];
+    const lines = [
+        `Showing units ranked by **${rankType}**.`,
+        `Sorting within rows: Higher Endless Score = Better placement.`,
+        `Click any card to open the official FNTD2 database page in a new tab.`
+    ];
     panel.innerHTML = lines.map(line => `<p>${line}</p>`).join('');
 }
 
@@ -1161,38 +1595,35 @@ function syncFilterState() {
     currentFiltersState.search = document.getElementById('search-id')?.value.trim().toLowerCase() || '';
 }
 
-function applyFinderFilters() {
-    syncFilterState();
-
-    let output = DB_UNITS.filter(u => {
-        const matchSearch = u.id.toLowerCase().includes(currentFiltersState.search) || u.name.toLowerCase().includes(currentFiltersState.search);
-        const matchRarity = currentFiltersState.rarities.includes(u.rarity);
-        const matchRank = currentFiltersState.ranks.includes(u.computedRank);
-        const matchClass = currentFiltersState.classes.includes(u.class);
-        const matchSubclass = u.subclasses.some(sub => currentFiltersState.subclasses.includes(sub));
-        const matchSynergy = currentFiltersState.synergy === "All" || u.synergy === currentFiltersState.synergy;
-
-        return matchSearch && matchRarity && matchRank && matchClass && matchSubclass && matchSynergy;
-    });
-
-    output.sort((a, b) => {
-        let weightA = DB_RARITIES[a.rarity]?.index || 99;
-        let weightB = DB_RARITIES[b.rarity]?.index || 99;
-        return currentFiltersState.sort === 'high-low' ? weightA - weightB : weightB - weightA;
-    });
-
-    renderGridContainer(output, 'finder-grid-container');
-}
-
-function clearAllFilters() {
-    document.querySelectorAll('.filters-sidebar input[type="checkbox"]').forEach(cb => cb.checked = true);
-    const searchField = document.getElementById('search-id');
-    if (searchField) searchField.value = "";
-    const synergyDropdown = document.getElementById('finder-synergy-dropdown');
-    if (synergyDropdown) synergyDropdown.value = "All";
-    const sortDropdown = document.getElementById('sort-rarity');
-    if (sortDropdown) sortDropdown.value = "high-low";
-    applyFinderFilters();
+function applyRarityCardStyle(card, unit) {
+    const rarityMeta = DB_RARITIES[unit.rarity];
+    const imageUrl = getUnitImageUrl(unit);
+    
+    card.style.border = '';
+    card.style.background = '';
+    card.style.borderImage = '';
+    card.style.boxShadow = '';
+    
+    if (unit.canon === false) {
+        card.style.border = '2px dashed #ffd700';
+        card.style.boxShadow = '0 0 10px rgba(255, 215, 0, 0.45)';
+        if (imageUrl.includes('qftJu7p.png')) {
+            card.style.background = 'linear-gradient(135deg, rgba(40,30,5,0.85) 0%, rgba(20,15,3,0.95) 100%) padding-box';
+        } else {
+            card.style.background = `linear-gradient(rgba(27, 13, 5, 0.45), rgba(27, 13, 5, 0.45)) padding-box, url('${imageUrl}') center/cover no-repeat padding-box`;
+        }
+    } else if (rarityMeta) {
+        if (rarityMeta.color.includes('gradient')) {
+            card.style.border = '2px solid transparent';
+            card.style.background = `linear-gradient(rgba(27, 13, 5, 0.45), rgba(27, 13, 5, 0.45)) padding-box, url('${imageUrl}') center/cover no-repeat padding-box, ${rarityMeta.color} border-box`;
+        } else {
+            card.style.border = `2px solid ${rarityMeta.color}`;
+            card.style.background = `linear-gradient(rgba(27, 13, 5, 0.45), rgba(27, 13, 5, 0.45)) padding-box, url('${imageUrl}') center/cover no-repeat padding-box`;
+        }
+    } else {
+        card.style.border = '2px solid rgba(255,255,255,0.18)';
+        card.style.background = `linear-gradient(rgba(27, 13, 5, 0.45), rgba(27, 13, 5, 0.45)) padding-box, url('${imageUrl}') center/cover no-repeat padding-box`;
+    }
 }
 
 function renderGridContainer(units, containerId, emptyNotice = null) {
@@ -1210,19 +1641,10 @@ function renderGridContainer(units, containerId, emptyNotice = null) {
         const card = document.createElement('div');
         card.className = 'unit-card-square animate-pop rarity-' + (unit.rarity || '').replace(/\s+/g,'-');
         card.dataset.unitId = unit.id;
-        const assetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name];
+        const assetId = unit.officialAssetId;
         if (assetId) card.dataset.unitAsset = assetId;
         
-        const rarityMeta = DB_RARITIES[unit.rarity];
-        if (rarityMeta && rarityMeta.color.includes('gradient')) {
-            card.style.borderImage = `${rarityMeta.color} 1`;
-            card.style.borderColor = 'transparent';
-        } else if(rarityMeta) {
-            card.style.borderColor = rarityMeta.color;
-            card.style.borderImage = 'none';
-        }
-
-        card.style.backgroundImage = `url('${getUnitImageUrl(unit)}'), none`;
+        applyRarityCardStyle(card, unit);
 
         card.innerHTML = `
             <div class="square-title-top">${unit.name}</div>
@@ -1241,41 +1663,60 @@ function renderGridContainer(units, containerId, emptyNotice = null) {
 }
 
 function openOfficialUnitPage(unit) {
+    if (!unit) return;
     const url = getOfficialUnitUrl(unit);
     window.open(url, '_blank', 'noopener');
-}
-
-function clearGridContainer(containerId, message = '') {
-    const grid = document.getElementById(containerId);
-    if (!grid) return;
-    grid.innerHTML = `<div style="color:var(--text-body-muted); padding:20px; font-size:14px;">${message || CONFIG.getText('FINDER.NO_RESULTS')}</div>`;
 }
 
 const tooltipNode = document.getElementById('hud-tooltip');
 
 function triggerTooltipShow(unit, event) {
+    if (window.matchMedia("(max-width: 720px)").matches) return; 
+    
     const endlessRank = unit.endlessRank || 'N/A';
-    const endlessPlacement = unit.endlessPlacement || 'N/A';
+    const endlessScore = unit.endlessPlacement || '0';
     const synergyRank = unit.synergyRank || 'N/A';
     const synergyPlacement = unit.synergyPlacement || 'N/A';
     const obtainabilityRank = unit.obtainabilityRank || 'N/A';
     const obtainabilityPlacement = unit.obtainabilityPlacement || 'N/A';
     const personalRankValue = unit.personalRank?.value || 'N/A';
+    const personalReasoning = unit.personalRank?.note || unit.personalRankNote || 'No reasoning provided.';
     const overallRank = unit.overallRank || 'N/A';
 
-    const soulValue = getSoulValue(unit);
     const html = `
-        <div class="tt-line tt-title"><span>${unit.name}</span><span>${unit.id}</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Endless Rank:</span><span style="color:var(--color-accent-blue); font-weight:700;">${endlessRank}</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Placement:</span><span>#${endlessPlacement}</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Synergy Rank:</span><span>${synergyRank}</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Placement:</span><span>#${synergyPlacement}</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Obtainability Rank:</span><span>${obtainabilityRank}</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Placement:</span><span>#${obtainabilityPlacement}</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Personal Rank:</span><span>${personalRankValue}</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Overall Rank:</span><span>${overallRank}</span></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Souls:</span><strong>${soulValue.toLocaleString()}</strong></div>
-        <div class="tt-line"><span style="color:var(--text-body-muted)">Value:</span><span>${unit.value || 'N/A'}</span></div>
+        <div class="tt-header" style="border-bottom: 2px solid var(--border-matrix); margin-bottom: 10px; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-family:var(--silkscreen-font); font-size:16px; color:#fff;">${unit.name} ${unit.canon === false ? '<span style="color:#ffd700; font-size:9px; font-weight:bold; background:rgba(255,215,0,0.12); padding:1.5px 4.5px; border-radius:3px; border:1px solid rgba(255,215,0,0.25); text-wrap:nowrap; vertical-align:middle; margin-left:4px;">CONCEPT</span>' : ''}</span>
+            <span style="font-size:10px; opacity:0.5; font-family:var(--font-mono);">${unit.id || ''}</span>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+            <div class="tt-stat-box" style="background:rgba(255,255,255,0.05); padding:6px; border-radius:4px;">
+                <div style="font-size:10px; color:var(--text-body-muted); text-transform:uppercase;">Endless</div>
+                <div style="font-size:14px;"><strong style="color:var(--color-accent-blue)">${endlessRank}</strong> <span style="font-size:10px; opacity:0.7;">Sc: ${endlessScore}</span></div>
+            </div>
+            <div class="tt-stat-box" style="background:rgba(255,255,255,0.05); padding:6px; border-radius:4px;">
+                <div style="font-size:10px; color:var(--text-body-muted); text-transform:uppercase;">Synergy</div>
+                <div style="font-size:14px;"><strong style="color:#ff7eb6">${synergyRank}</strong> <span style="font-size:10px; opacity:0.7;">#${synergyPlacement}</span></div>
+            </div>
+            <div class="tt-stat-box" style="background:rgba(255,255,255,0.05); padding:6px; border-radius:4px;">
+                <div style="font-size:10px; color:var(--text-body-muted); text-transform:uppercase;">Obtain</div>
+                <div style="font-size:14px;"><strong style="color:#8df6ff">${obtainabilityRank}</strong> <span style="font-size:10px; opacity:0.7;">#${obtainabilityPlacement}</span></div>
+            </div>
+            <div class="tt-stat-box" style="background:rgba(255,255,255,0.05); padding:6px; border-radius:4px;">
+                <div style="font-size:10px; color:var(--text-body-muted); text-transform:uppercase;">Personal</div>
+                <div style="font-size:14px;"><strong style="color:#fff">${personalRankValue}</strong></div>
+            </div>
+        </div>
+        
+        <div style="background:rgba(0,0,0,0.2); padding:8px; border-radius:4px; margin-bottom:10px; border-left: 2px solid var(--color-accent-orange);">
+            <div style="font-size:10px; color:var(--text-body-muted); margin-bottom:2px;">REASONING:</div>
+            <div style="font-size:11px; line-height:1.4; opacity:0.9;">${personalReasoning}</div>
+        </div>
+        
+        <div style="display:flex; justify-content:space-between; align-items:center; border-top: 1px solid var(--border-matrix); padding-top: 8px;">
+            <span style="color:var(--text-body-muted); font-size:11px; font-weight:700;">OVERALL RANK:</span>
+            <span style="color:#ffd68d; font-size:24px; font-weight:900; text-shadow: 0 0 10px rgba(255,214,141,0.3);">${overallRank}</span>
+        </div>
     `;
 
     tooltipNode.innerHTML = html;
@@ -1284,8 +1725,26 @@ function triggerTooltipShow(unit, event) {
 }
 
 function triggerTooltipMove(e) {
-    tooltipNode.style.left = (e.clientX + 16) + 'px';
-    tooltipNode.style.top = (e.clientY + 16) + 'px';
+    const tooltipWidth = tooltipNode.offsetWidth || 240;
+    const tooltipHeight = tooltipNode.offsetHeight || 180;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let x = e.clientX + 16;
+    let y = e.clientY + 16;
+
+    if (x + tooltipWidth > viewportWidth) {
+        x = e.clientX - tooltipWidth - 16;
+    }
+    if (y + tooltipHeight > viewportHeight) {
+        y = e.clientY - tooltipHeight - 16;
+    }
+
+    x = Math.max(8, x);
+    y = Math.max(8, y);
+
+    tooltipNode.style.left = x + 'px';
+    tooltipNode.style.top = y + 'px';
 }
 
 function triggerTooltipHide() {
@@ -1302,49 +1761,49 @@ function toggleCostVisibility() {
     document.getElementById('toggle-cost-view').checked ? document.body.classList.remove('hide-placement-costs') : document.body.classList.add('hide-placement-costs');
 }
 
- 
 function renderTierlist() {
     const container = document.getElementById('tierlist-rows-wrapper');
+    if (!container) return;
     container.innerHTML = "";
 
     const elFilter = document.getElementById('tier-filter-element')?.value || 'All';
-    const clFilter = document.getElementById('tier-filter-class')?.value || '';
-    const subFilter = document.getElementById('tier-filter-subclass')?.value || '';
-    const rankType = document.getElementById('tier-filter-ranktype')?.value || 'All';
+    const clFilter = document.getElementById('tier-filter-class')?.value || 'All';
+    const subFilter = document.getElementById('tier-filter-subclass')?.value || 'All';
+    const rankType = document.getElementById('tier-filter-ranktype')?.value || 'Overall';
     const rankValue = document.getElementById('tier-filter-rankvalue')?.value || 'All';
-    const soulMin = Number(document.getElementById('tier-filter-soul-min')?.value || 0);
-    const soulMaxRaw = Number(document.getElementById('tier-filter-soul-max')?.value || 0);
-    const hasSoulMax = soulMaxRaw > 0;
+    const rarityFilter = document.getElementById('tier-filter-rarity')?.value || 'All';
 
-    const getRankValue = (unit) => {
-        switch (rankType) {
-            case 'Endless': return unit.endlessRank;
-            case 'Personal': return unit.personalRank?.value;
-            case 'Synergy': return unit.synergyRank;
-            case 'Obtainability': return unit.obtainabilityRank;
-            case 'Overall': return unit.overallRank;
-            default: return null;
-        }
+    const getTargetRank = (u) => {
+        if (rankType === 'Personal') return u.personalRank?.value || 'N/A';
+        if (rankType === 'Endless') return u.endlessRank || 'N/A';
+        if (rankType === 'Synergy') return u.synergyRank || 'N/A';
+        if (rankType === 'Obtainability') return u.obtainabilityRank || 'N/A';
+        return u.overallRank || 'N/A';
     };
 
     ALL_RANKS.forEach(tier => {
+        if (rankValue !== "All" && tier !== rankValue) return;
+
         let matchingTierUnits = DB_UNITS.filter(u => {
-            const baseTier = normalizeRankValue(u.rank || u.endlessRank || u.overallRank);
+            const hideNonCanon = document.getElementById('setting-hide-non-canon')?.checked ?? false;
+            if (hideNonCanon && u.canon === false) return false;
+
+            const activeRank = getTargetRank(u);
+            const baseTier = normalizeRankValue(activeRank);
             if (baseTier !== tier) return false;
+            
             if (elFilter !== "All" && u.element !== elFilter) return false;
             if (clFilter && clFilter !== "All" && u.class !== clFilter) return false;
-            if (subFilter && subFilter !== "All" && !u.subclasses.includes(subFilter)) return false;
-            if (rankType !== 'All') {
-                const compareRank = getRankValue(u) || 'N/A';
-                if (rankValue !== 'All' && compareRank !== rankValue) return false;
-            }
-            const soulValue = getSoulValue(u);
-            if (soulValue < soulMin) return false;
-            if (hasSoulMax && soulValue > soulMaxRaw) return false;
+            const subclasses = Array.isArray(u.subclasses) ? u.subclasses : [];
+            if (subFilter && subFilter !== "All" && !subclasses.includes(subFilter)) return false;
+            if (rarityFilter !== "All" && u.rarity !== rarityFilter) return false;
+            
             return true;
         });
 
-        matchingTierUnits.sort((a, b) => (Number(a.endlessPlacement) || 0) - (Number(b.endlessPlacement) || 0));
+        // Sorting: Higher Endless Score = Better
+        matchingTierUnits.sort((a, b) => (Number(b.endlessPlacement) || 0) - (Number(a.endlessPlacement) || 0));
+        
         if (matchingTierUnits.length === 0) return;
 
         const rowNode = document.createElement('div');
@@ -1358,259 +1817,11 @@ function renderTierlist() {
     });
 
     if (!container.children.length) {
-        container.innerHTML = `<div style="color:var(--text-body-muted); padding:20px; font-size:14px;">No ranked units match your filters. Try widening class/subclass or soul range.</div>`;
+        container.innerHTML = `<div style="color:var(--text-body-muted); padding:20px; font-size:14px;">No units match your selected rank type and value.</div>`;
     }
     updateTierlistExplanationText(clFilter, subFilter, rankType, rankValue);
 }
 
- 
-function renderEnemyCodex() {
-    const container = document.getElementById('codex-grid-container');
-    const query = document.getElementById('enemy-search-id').value.trim().toLowerCase();
-    container.innerHTML = "";
-
-    let filteredEnemies = DB_ENEMIES.filter(e => e.name.toLowerCase().includes(query) || e.traits.toLowerCase().includes(query));
-
-    if(filteredEnemies.length === 0) {
-        container.innerHTML = `<div style="color:var(--text-body-muted); padding:20px;">${CONFIG.getText('CODEX.NO_RESULTS')}</div>`;
-        return;
-    }
-
-    filteredEnemies.forEach(enemy => {
-        container.innerHTML += `
-            <div class="enemy-card animate-pop">
-                <h3>${enemy.name}</h3>
-                <div class="enemy-stat-row"><span class="enemy-stat-label">Health Pool:</span><span class="enemy-stat-value">${enemy.hp.toLocaleString()}</span></div>
-                <div class="enemy-stat-row"><span class="enemy-stat-label">Speed Parameter:</span><span class="enemy-stat-value">${enemy.speed}</span></div>
-                <div class="enemy-stat-row"><span class="enemy-stat-label">Intro Wave:</span><span class="enemy-stat-value">Wave ${enemy.introWave}</span></div>
-                <div style="margin-top:10px; font-size:12px; color:var(--text-body-main); line-height:1.4;"><strong>Traits:</strong> ${enemy.traits}</div>
-            </div>
-        `;
-    });
-}
-
- 
-function visualizeSpecificUnitSubpage(unit) {
-    openOfficialUnitPage(unit);
-}
-
-function openUnitDetailsById(unitId) {
-    const unit = DB_UNITS.find(u => u.id === unitId);
-    if (!unit) {
-        alert(`Unit with ID "${unitId}" could not be found.`);
-        return;
-    }
-    detailsActiveUnit = unit;
-    simulatedLevel = 1;
-    simulatedEnchant = "None";
-    switchView('page-details');
-    executeDetailsDisplayDraw();
-}
-
-function executeDetailsDisplayDraw() {
-    const target = document.getElementById('details-view-injector');
-    const unit = detailsActiveUnit;
-    if(!unit) return;
-
-    const elementMeta = DB_ELEMENTS[unit.element] || { passiveUnit: "Unknown", passiveEnemy: "Unknown" };
-    let rarityMeta = DB_RARITIES[unit.rarity];
-    let frameBorderStyle = rarityMeta?.color.includes('gradient') ? `border-image: ${rarityMeta.color} 1; border-color: transparent;` : `border-color: ${rarityMeta?.color || '#555'};`;
-
-    const statsTabContent = `
-        <div class="specs-block-card">
-            <h4>${CONFIG.getText('DETAILS.CALCULATOR_TITLE')}</h4>
-            <div class="interactive-calc-wrapper">
-                <div class="calc-control-node">
-                    <label for="detail-level-input">${CONFIG.getText('DETAILS.LEVEL_LABEL')}</label>
-                    <input type="number" id="detail-level-input" min="1" max="60" value="${simulatedLevel}" oninput="triggerLiveCalculationsRun()">
-                </div>
-                <div class="calc-control-node">
-                    <label for="detail-enchant-dropdown">${CONFIG.getText('DETAILS.ENCHANT_LABEL')}</label>
-                    <select id="detail-enchant-dropdown" onchange="triggerLiveCalculationsRun()">
-                        <option value="None">None</option>
-                        <option value="Sharpened">Sharpened (+15% Damage)</option>
-                        <option value="Grounded">Grounded (+20% Range, +5% CD)</option>
-                        <option value="Hyperclocked">Hyperclocked (-20% CD, -5% DMG)</option>
-                        <option value="Godly">Godly (+45% DMG, +15% RNG, -10% CD)</option>
-                    </select>
-                </div>
-            </div>
-            <div class="stat-numeric-flexrow">
-                <div class="stat-metric-pill"><div class="stat-metric-label">${CONFIG.getText('DETAILS.STAT_MIN_DMG')}</div><div class="stat-metric-val" id="calc-min-dmg">0</div></div>
-                <div class="stat-metric-pill"><div class="stat-metric-label">${CONFIG.getText('DETAILS.STAT_MAX_DMG')}</div><div class="stat-metric-val" id="calc-max-dmg">0</div></div>
-                <div class="stat-metric-pill"><div class="stat-metric-label">${CONFIG.getText('DETAILS.STAT_RANGE')}</div><div class="stat-metric-val" id="calc-range">0</div></div>
-                <div class="stat-metric-pill"><div class="stat-metric-label">${CONFIG.getText('DETAILS.STAT_COOLDOWN')}</div><div class="stat-metric-val" id="calc-cooldown">0s</div></div>
-                <div class="stat-metric-pill"><div class="stat-metric-label">${CONFIG.getText('DETAILS.STAT_DPS')}</div><div class="stat-metric-val" id="calc-dps" style="color:var(--color-accent-blue);">0/s</div></div>
-            </div>
-        </div>
-    `;
-
-    const passivesBlock = (unit.passives || []).map(p => `
-            <div style="background: var(--bg-input-field); padding: 12px; border-radius: var(--global-radius); border: 1px solid var(--border-matrix); margin-bottom: 8px;">
-            <div style="font-weight:700; color:var(--text-heading); font-size:13.5px; margin-bottom:2px;">${p.name}</div>
-            <div style="font-size:13px; color:var(--text-body-main); line-height:1.4;">${p.desc}</div>
-        </div>
-    `).join('') || `<div style="color:var(--text-body-muted); font-size:13px;">${CONFIG.getText('DETAILS.NO_PASSIVES')}</div>`;
-
-    const abilitiesBlock = (unit.abilities || []).map(a => `
-        <div style="background:var(--bg-input-field); padding:12px; border-radius:var(--global-radius); border:1px solid var(--border-matrix); margin-bottom:8px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <strong style="color:var(--text-heading); font-size:13.5px;">${a.name}</strong>
-                <span style="color:#ef4444; font-size:12px; font-weight:700;">CD: ${a.cooldown ?? 'N/A'}s</span>
-            </div>
-            <div style="font-size:13px; color:var(--text-body-main); line-height:1.4;">${a.desc}</div>
-        </div>
-    `).join('') || `<div style="color:var(--text-body-muted); font-size:13px;">${CONFIG.getText('DETAILS.NO_ABILITIES')}</div>`;
-
-    const passivesAbilitiesTabContent = `
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
-            <div class="specs-block-card" style="margin:0;">
-                <h4>${CONFIG.getText('DETAILS.PASSIVES_TITLE')}</h4>
-                ${passivesBlock}
-            </div>
-            <div class="specs-block-card" style="margin:0;">
-                <h4>${CONFIG.getText('DETAILS.ABILITIES_TITLE')}</h4>
-                ${abilitiesBlock}
-            </div>
-        </div>
-    `;
-
-    const rankedTabContent = `
-        <div class="specs-block-card">
-            <h4>${CONFIG.getText('DETAILS.RANKED_TAB')}</h4>
-            <div style="display:flex; flex-direction:column; gap:12px;">
-                <div><span style="color:var(--text-body-muted); font-size:13px;">${CONFIG.getText('DETAILS.TIER_PLACEMENT')}</span> <strong style="color:#ffb74d; font-size:14px; margin-left:6px;">${unit.computedRank} (#${unit.rankedId})</strong></div>
-                <div><span style="color:var(--text-body-muted); font-size:13px;">${CONFIG.getText('DETAILS.ENDLESS_WAVE_CAP')}</span> <span id="detail-wave-score-pill" style="font-size:16px; margin-left:6px; font-weight:bold;">${unit.rankedWave}</span></div>
-            </div>
-        </div>
-        <div class="specs-block-card">
-            <h4>${CONFIG.getText('DETAILS.ELEMENT_TITLE')} ${unit.element}</h4>
-            <div style="font-size:13.5px; line-height:1.5;">
-                <div><strong style="color:var(--color-currency-green);">${CONFIG.getText('DETAILS.UNIT_EFFECT')}</strong> ${elementMeta.passiveUnit}</div>
-                <div style="margin-top:6px;"><strong style="color:#ef4444;">${CONFIG.getText('DETAILS.TARGET_MODIFIER')}</strong> ${elementMeta.passiveEnemy}</div>
-            </div>
-        </div>
-    `;
-
-    const obtainmentTabContent = `
-        <div class="specs-block-card">
-            <h4>${CONFIG.getText('DETAILS.OBTAINMENT_LABEL')}</h4>
-            ${formatObtainments(unit.obtainments)}
-        </div>
-    `;
-
-    const aliasesTabContent = `
-        <div class="specs-block-card">
-            <h4>${CONFIG.getText('DETAILS.ALIASES_LABEL')}</h4>
-            ${formatAliases(unit.aliases || [], unit.id)}
-        </div>
-    `;
-
-    const sourcesTabContent = `${obtainmentTabContent}${aliasesTabContent}`;
-
-    const fanmadeBuffsTabContent = `
-        <div class="specs-block-card">
-            <h4>${CONFIG.getText('DETAILS.FANMADE_BUFFS_TITLE')}</h4>
-            ${unit.fanmadeBuffs && unit.fanmadeBuffs.length ? unit.fanmadeBuffs.map(buff => `
-                <div style="margin-bottom: 10px; padding: 10px; background: var(--bg-input-field); border-radius: var(--global-radius); border: 1px solid var(--border-matrix);">
-                    <div style="font-weight: 700; color: var(--text-heading); font-size: 13px;">${buff.name}</div>
-                    <div style="font-size: 13px; color: var(--text-body-main); line-height: 1.4;">${buff.desc}</div>
-                </div>
-            `).join('') : `<div style="color: var(--text-body-muted); font-size: 13px;">No fanmade buffs registered for this unit.</div>`}
-        </div>
-    `;
-
-    const profileAssetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name] || '';
-    const assetAttribute = profileAssetId ? ` data-unit-asset="${profileAssetId}"` : '';
-    target.innerHTML = `
-        <div class="profile-layout-grid animate-pop">
-            <div>
-                <div class="profile-summary-box">
-                    <div class="profile-avatar-frame"${assetAttribute} style="${frameBorderStyle} background-image: url('${getUnitImageUrl(unit)}'), none;"></div>
-                    <h2 style="color:var(--text-heading); margin-bottom:4px;">${unit.name}</h2>
-                    <p style="color:var(--text-body-muted); font-size:13px; font-weight:600; text-transform:uppercase; margin-bottom:16px;">${unit.rarity} | ID: ${unit.id}</p>
-                    
-                    <div style="text-align:left; background:var(--bg-input-field); padding:12px; border-radius:var(--global-radius); border:1px solid var(--border-matrix); margin-bottom:12px;">
-                        <div style="font-size:13px; margin-bottom:6px;"><span style="color:var(--text-body-muted);">${CONFIG.getText('DETAILS.CLASS_LABEL')}</span> <strong style="color:var(--text-heading);">${unit.class}</strong></div>
-                        <div style="font-size:13px; margin-bottom:6px;"><span style="color:var(--text-body-muted);">${CONFIG.getText('DETAILS.SUBCLASSES_LABEL')}</span> <strong style="color:var(--text-heading);">${unit.subclasses.join(', ')}</strong></div>
-                        <div style="font-size:13px;"><span style="color:var(--text-body-muted);">${CONFIG.getText('DETAILS.SYNERGY_LABEL')}</span> <strong style="color:var(--text-heading);">${unit.synergy}</strong></div>
-                    </div>
-
-                    <div style="text-align:left; background:var(--bg-input-field); padding:12px; border-radius:var(--global-radius); border:1px solid var(--border-matrix);">
-                        <div style="font-size:13px; margin-bottom:6px;"><span style="color:var(--text-body-muted);">${CONFIG.getText('DETAILS.PLACEMENT_LIMIT')}</span> <strong style="color:var(--text-heading); font-size:14px;">${unit.placementLimit || 5} max</strong></div>
-                        <div style="font-size:13px;"><span style="color:var(--text-body-muted);">${CONFIG.getText('DETAILS.PLACEMENT_COST')}</span> <strong style="color:var(--text-heading); font-size:14px;">${unit.placementCost}</strong></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="profile-specs-sheet">
-                <!-- Tab Navigation -->
-                <div style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 2px solid var(--border-matrix); flex-wrap: wrap;">
-                    <button data-detail-tab="stats" class="detail-tab-btn active" onclick="switchDetailTab('stats')">${CONFIG.getText('DETAILS.STATS_TAB')}</button>
-                    <button data-detail-tab="passives" class="detail-tab-btn" onclick="switchDetailTab('passives')">${CONFIG.getText('DETAILS.PASSIVES_TAB')}</button>
-                    <button data-detail-tab="sources" class="detail-tab-btn" onclick="switchDetailTab('sources')">${CONFIG.getText('DETAILS.SOURCES_TAB')}</button>
-                    <button data-detail-tab="fanmade" class="detail-tab-btn" onclick="switchDetailTab('fanmade')">${CONFIG.getText('DETAILS.FANMADE_BUFFS_TAB')}</button>
-                </div>
-
-                <!-- Tab Contents -->
-                <div data-detail-content="stats" style="display: block;">${statsTabContent}${rankedTabContent}</div>
-                <div data-detail-content="passives" style="display: none;">${passivesAbilitiesTabContent}</div>
-                <div data-detail-content="sources" style="display: none;">${sourcesTabContent}</div>
-                <div data-detail-content="fanmade" style="display: none;">${fanmadeBuffsTabContent}</div>
-            </div>
-        </div>
-    `;
-
-    const wavePill = document.getElementById('detail-wave-score-pill');
-    if (wavePill) {
-        if (unit.rankedWave < CONFIG.GAME_BALANCE.WAVE_THRESHOLDS.LOW_THRESHOLD) wavePill.className = "wave-score-low";
-        else if (unit.rankedWave > CONFIG.GAME_BALANCE.WAVE_THRESHOLDS.HIGH_THRESHOLD) wavePill.className = "wave-score-high";
-        else wavePill.className = "wave-score-mid";
-    }
-
-    triggerLiveCalculationsRun();
-}
-
-function triggerLiveCalculationsRun() {
-    const unit = detailsActiveUnit;
-    if(!unit) return;
-
-    let lvlInput = document.getElementById('detail-level-input');
-    let lvl = parseInt(lvlInput.value) || 1;
-    if(lvl < CONFIG.GAME_BALANCE.LEVEL_MIN) { lvl = CONFIG.GAME_BALANCE.LEVEL_MIN; lvlInput.value = CONFIG.GAME_BALANCE.LEVEL_MIN; }
-    if(lvl > CONFIG.GAME_BALANCE.LEVEL_MAX) { lvl = CONFIG.GAME_BALANCE.LEVEL_MAX; lvlInput.value = CONFIG.GAME_BALANCE.LEVEL_MAX; }
-    
-    simulatedLevel = lvl;
-    simulatedEnchant = document.getElementById('detail-enchant-dropdown').value;
-
-    let levelStatScaler = 1 + ((lvl - 1) * CONFIG.GAME_BALANCE.LEVEL_SCALING.DAMAGE_MULTIPLIER); 
-    let levelRangeScaler = 1 + ((lvl - 1) * CONFIG.GAME_BALANCE.LEVEL_SCALING.RANGE_MULTIPLIER); 
-    let levelCooldownContractor = 1 - ((lvl - 1) * CONFIG.GAME_BALANCE.LEVEL_SCALING.COOLDOWN_DIVISOR); 
-
-    const enchantMod = CONFIG.getEnchant(simulatedEnchant);
-
-    const [baseMinDmg, baseMaxDmg] = unit.damage || [0, 0];
-    const [baseRange] = unit.range || [0];
-    const [baseCooldown] = unit.cooldown || [0];
-
-    let finalMinDmg = Math.round(baseMinDmg * levelStatScaler * enchantMod.DMG_MOD);
-    let finalMaxDmg = Math.round(baseMaxDmg * levelStatScaler * enchantMod.DMG_MOD);
-    let finalRange = parseFloat((baseRange * levelRangeScaler * enchantMod.RANGE_MOD).toFixed(1));
-    let finalCd = parseFloat((baseCooldown * levelCooldownContractor * enchantMod.CD_MOD).toFixed(2));
-    if (isNaN(finalCd) || finalCd < 0.1) finalCd = 0.1;
-
-    let computedDps = finalCd > 0 ? Math.round(finalMaxDmg / finalCd) : 0;
-
-    document.getElementById('calc-min-dmg').innerText = finalMinDmg;
-    document.getElementById('calc-max-dmg').innerText = finalMaxDmg;
-    document.getElementById('calc-range').innerText = finalRange;
-    document.getElementById('calc-cooldown').innerText = finalCd + "s";
-    document.getElementById('calc-dps').innerText = computedDps + "/s";
-}
-
-function returnToCatalog() { switchView('page-tierlist'); }
-
- 
 function switchTeamCreatorTab(mode) {
     document.getElementById('team-tab-generate').classList.toggle('active', mode === 'generate');
     document.getElementById('team-tab-rate').classList.toggle('active', mode === 'rate');
@@ -1624,18 +1835,18 @@ function switchTeamCreatorTab(mode) {
 function generateCreatorSquad() {
     const checkedClasses = Array.from(document.querySelectorAll('.gen-class-cb:checked')).map(cb => cb.value);
     const checkedSubclasses = Array.from(document.querySelectorAll('.gen-subclass-cb:checked')).map(cb => cb.value);
-    const soulMin = Number(document.getElementById('gen-soul-min')?.value || 0);
-    const soulMax = Number(document.getElementById('gen-soul-max')?.value || 0);
     const elementFilter = document.getElementById('gen-element-filter')?.value || 'All';
+    const rarityFilter = document.getElementById('gen-rarity-filter')?.value || 'All';
+    const statusFilter = document.getElementById('gen-status-filter')?.value || 'All';
 
     let subsetPool = DB_UNITS.filter(u => {
-        const soulValue = getSoulValue(u);
         const matchClass = checkedClasses.includes(u.class);
-        const matchSubclass = u.subclasses.some(s => checkedSubclasses.includes(s));
+        const subclasses = Array.isArray(u.subclasses) ? u.subclasses : [];
+        const matchSubclass = subclasses.some(s => checkedSubclasses.includes(s));
         const matchElement = elementFilter === 'All' || u.element === elementFilter;
-        const matchMin = soulValue >= soulMin;
-        const matchMax = soulMax > 0 ? soulValue <= soulMax : true;
-        return matchClass && matchSubclass && matchElement && matchMin && matchMax;
+        const matchRarity = rarityFilter === 'All' || u.rarity === rarityFilter;
+        const matchStatus = statusFilter === 'All' || u.status === statusFilter;
+        return matchClass && matchSubclass && matchElement && matchRarity && matchStatus;
     });
     if (subsetPool.length === 0) {
         clearTeamSlots();
@@ -1740,40 +1951,32 @@ function renderManualBuilderPool() {
     const searchTerm = (document.getElementById('team-builder-search')?.value.trim().toLowerCase() || '');
     const classFilter = classSelect?.value || 'All';
     const subclassFilter = subclassSelect?.value || 'All';
-    const soulMin = Number(document.getElementById('team-builder-soul-min')?.value || 0);
-    const soulMax = Number(document.getElementById('team-builder-soul-max')?.value || 0);
+    const hideNonCanon = document.getElementById('setting-hide-non-canon')?.checked ?? false;
 
     const availableUnits = DB_UNITS.filter(unit => {
+        if (hideNonCanon && unit.canon === false) return false;
         const isSelected = teamSlots.some(slot => slot?.id === unit.id);
-        const matchSearch = unit.name.toLowerCase().includes(searchTerm) || unit.id.toLowerCase().includes(searchTerm);
-        const matchClass = classFilter === 'All' || unit.class === classFilter;
-        const matchSubclass = subclassFilter === 'All' || unit.subclasses.includes(subclassFilter);
-        const soulValue = getSoulValue(unit);
-        const matchSoulMin = soulValue >= soulMin;
-        const matchSoulMax = soulMax > 0 ? soulValue <= soulMax : true;
-        return !isSelected && matchSearch && matchClass && matchSubclass && matchSoulMin && matchSoulMax;
+        const matchesSearch = unit.name.toLowerCase().includes(searchTerm) || unit.id.toLowerCase().includes(searchTerm);
+        const matchesClass = classFilter === 'All' || unit.class === classFilter;
+        const subclasses = Array.isArray(unit.subclasses) ? unit.subclasses : [];
+        const matchesSubclass = subclassFilter === 'All' || subclasses.includes(subclassFilter);
+        return !isSelected && matchesSearch && matchesClass && matchesSubclass;
     });
 
     poolContainer.innerHTML = '';
     if (availableUnits.length === 0) {
-        poolContainer.innerHTML = `<div style="color:var(--text-body-muted); padding:18px; font-size:13px;">${CONFIG.getText('GENERATOR.RATING_EMPTY')}</div>`;
+        poolContainer.innerHTML = `<div style="color:var(--text-body-muted); padding:18px; font-size:13px;">No matching units can be added to your team.</div>`;
         return;
     }
 
     availableUnits.forEach(unit => {
         const card = document.createElement('div');
         card.className = 'unit-card-square animate-pop rarity-' + (unit.rarity || '').replace(/\s+/g,'-');
-        const assetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name];
+        const assetId = unit.officialAssetId;
         if (assetId) card.dataset.unitAsset = assetId;
-        const rarityMeta = DB_RARITIES[unit.rarity];
-        card.style.backgroundImage = `url('${getUnitImageUrl(unit)}'), none`;
-        if (rarityMeta && rarityMeta.color.includes('gradient')) {
-            card.style.borderImage = `${rarityMeta.color} 1`;
-            card.style.borderColor = 'transparent';
-        } else if (rarityMeta) {
-            card.style.borderColor = rarityMeta.color;
-            card.style.borderImage = 'none';
-        }
+        
+        applyRarityCardStyle(card, unit);
+
         card.innerHTML = `
             <div class="square-title-top">${unit.name}</div>
             <div class="square-cost-bottom">$${unit.placementCost}</div>
@@ -1803,17 +2006,11 @@ function updateTeamRatingPanel() {
     activeTeam.forEach(unit => {
         const card = document.createElement('div');
         card.className = 'unit-card-square animate-pop rarity-' + (unit.rarity || '').replace(/\s+/g,'-');
-        const assetId = unit.officialAssetId || OFFICIAL_UNIT_ASSET_IDS[unit.name];
+        const assetId = unit.officialAssetId;
         if (assetId) card.dataset.unitAsset = assetId;
-        const rarityMeta = DB_RARITIES[unit.rarity];
-        card.style.backgroundImage = `url('${getUnitImageUrl(unit)}'), none`;
-        if (rarityMeta && rarityMeta.color.includes('gradient')) {
-            card.style.borderImage = `${rarityMeta.color} 1`;
-            card.style.borderColor = 'transparent';
-        } else if (rarityMeta) {
-            card.style.borderColor = rarityMeta.color;
-            card.style.borderImage = 'none';
-        }
+        
+        applyRarityCardStyle(card, unit);
+
         card.innerHTML = `
             <div class="square-title-top">${unit.name}</div>
             <div class="square-cost-bottom">$${unit.placementCost}</div>
@@ -1822,7 +2019,7 @@ function updateTeamRatingPanel() {
 
         const removeBtn = document.createElement('button');
         removeBtn.className = 'team-remove-btn';
-        removeBtn.textContent = CONFIG.getText('GENERATOR.REMOVE_TEAM_MEMBER');
+        removeBtn.textContent = 'Remove';
         removeBtn.addEventListener('click', (event) => {
             event.stopPropagation();
             removeTeamMember(unit.id);
@@ -1865,7 +2062,7 @@ function getTeamRating(team) {
     else if (normalizedTeam.length >= 4) score += 1;
     if (missingClasses.length === 0) score += 1;
     if (synergyCount >= 3) score += 1;
-    if (totalCost <= (18 * normalizedTeam.length)) score += 1;
+    if (totalCost <= (1800 * normalizedTeam.length)) score += 1;
 
     const label = score >= 4 ? 'Strong Team' : score === 3 ? 'Balanced Team' : 'Needs Work';
     const coverageText = classes.length > 0 ? classes.join(', ') : 'None';
@@ -1881,7 +2078,7 @@ function getTeamRating(team) {
     if (synergyCount <= 1) {
         issues.push('Team has low synergy variety; diversify unit synergies.');
     }
-    if (totalCost > (18 * team.length)) {
+    if (totalCost > (1800 * team.length)) {
         issues.push('Team cost is on the high side; watch placement budget.');
     }
     if (!issues.length) {
@@ -1898,23 +2095,29 @@ function getTeamRating(team) {
     };
 }
 
- 
 const overlayNode = document.getElementById('settings-overlay');
-function openSettingsModal() { overlayNode.classList.add('active-view'); }
-function closeSettingsModal() { overlayNode.classList.remove('active-view'); }
+function openSettingsModal() { overlayNode.style.display = 'flex'; }
+function closeSettingsModal() { overlayNode.style.display = 'none'; }
 
 function applyVisualSettings() {
     const ambient = document.getElementById('setting-ambient-anim')?.checked ?? true;
     const cardGlow = document.getElementById('setting-card-glow')?.checked ?? true;
     const dust = document.getElementById('setting-dust')?.checked ?? true;
     const bulletHoles = document.getElementById('setting-bulletholes')?.checked ?? true;
+    const hideNonCanon = document.getElementById('setting-hide-non-canon')?.checked ?? false;
 
     document.body.classList.toggle('effects-reduced', !ambient);
     document.body.classList.toggle('no-card-glow', !cardGlow);
     document.body.classList.toggle('no-dust', !dust);
     document.body.classList.toggle('no-bulletholes', !bulletHoles);
 
-    localStorage.setItem('fntd2_visual_settings', JSON.stringify({ ambient, cardGlow, dust, bulletHoles }));
+    localStorage.setItem('fntd2_visual_settings', JSON.stringify({ ambient, cardGlow, dust, bulletHoles, hideNonCanon }));
+
+    // Rerender all active list managers to apply the canon database filters immediately
+    if (typeof renderTierlist === "function") renderTierlist();
+    if (typeof renderManualBuilderPool === "function") renderManualBuilderPool();
+    if (typeof renderTeamUnitSelector === "function") renderTeamUnitSelector();
+    if (typeof renderTradeUnitSelector === "function") renderTradeUnitSelector();
 }
 
 function restoreVisualSettings() {
@@ -1932,18 +2135,18 @@ function restoreVisualSettings() {
         if (typeof stored.bulletHoles === 'boolean' && document.getElementById('setting-bulletholes')) {
             document.getElementById('setting-bulletholes').checked = stored.bulletHoles;
         }
+        if (typeof stored.hideNonCanon === 'boolean' && document.getElementById('setting-hide-non-canon')) {
+            document.getElementById('setting-hide-non-canon').checked = stored.hideNonCanon;
+        }
     } catch (error) {
         console.warn('Failed to restore visual settings', error);
     }
     applyVisualSettings();
 }
 
- 
 const unitCreatorOverlay = document.getElementById('unit-creator-overlay');
 function openUnitCreator() { 
     unitCreatorOverlay.style.display = 'flex'; 
-    unitCreatorOverlay.style.alignItems = 'center';
-    unitCreatorOverlay.style.justifyContent = 'center';
     switchAdminTab('units');
 }
 function closeUnitCreator() { unitCreatorOverlay.style.display = 'none'; }
@@ -2004,10 +2207,19 @@ function submitUnitCreation(e) {
         name: unitName,
         rarity: document.getElementById('creator-rarity').value,
         class: document.getElementById('creator-class').value,
-        placementCost: parseInt(document.getElementById('creator-cost').value),
-        soulValue: parseInt(document.getElementById('creator-souls').value || '0', 10),
-        placementLimit: parseInt(document.getElementById('creator-limit').value),
+        placementCost: parseInt(document.getElementById('creator-cost').value, 10) || 0,
+        placementLimit: parseInt(document.getElementById('creator-limit').value, 10) || 5,
         obtainments: document.getElementById('creator-obtainment').value,
+        endlessRank: document.getElementById('creator-endless-rank').value,
+        endlessPlacement: document.getElementById('creator-endless-placement').value || '0',
+        obtainabilityRank: document.getElementById('creator-obtain-rank').value,
+        obtainabilityPlacement: document.getElementById('creator-obtain-placement').value || '0',
+        manualOverallRank: document.getElementById('creator-overall-rank').value,
+        personalRank: {
+            value: document.getElementById('creator-personal-rank').value,
+            note: document.getElementById('creator-reasoning').value || 'No personal reasoning provided.'
+        },
+        personalRankNote: document.getElementById('creator-reasoning').value || 'No personal reasoning provided.',
         element: document.getElementById('creator-element').value,
         synergy: 'Custom',
         subclasses: [],
@@ -2029,14 +2241,18 @@ function submitUnitCreation(e) {
         deletedIds.delete(newUnit.id);
         saveDeletedUnitIds(deletedIds);
     }
+    
     saveCustomUnitsToStorage();
     hydrateUnitFromOfficial(newUnit).then(() => {
         saveCustomUnitsToStorage();
+        normalizeAllUnitData();
         renderTierlist();
     });
     document.getElementById('unit-creator-form').reset();
     closeUnitCreator();
-    applyFinderFilters();
+    normalizeAllUnitData();
+    renderTierlist();
+    renderManualBuilderPool();
     alert(`Unit "${newUnit.name}" created successfully.`);
 }
 
@@ -2045,12 +2261,12 @@ function initSystemModalEvents() {
         if(e.target === overlayNode) closeSettingsModal();
     });
     document.addEventListener('keydown', (e) => {
-        if(e.key === 'Escape' && overlayNode.classList.contains('active-view')) {
+        if(e.key === 'Escape' && overlayNode.style.display !== 'none') {
             closeSettingsModal();
         }
     });
     document.addEventListener('keydown', (e) => {
-        if(e.key === 'Escape' && unitCreatorOverlay.style.display === 'flex') {
+        if(e.key === 'Escape' && unitCreatorOverlay.style.display !== 'none') {
             closeUnitCreator();
         }
     });
@@ -2062,7 +2278,7 @@ function toggleInterfaceTheme(targetMode) {
     document.documentElement.setAttribute('data-theme', targetMode);
     document.querySelectorAll('.theme-switch-segmented-control button').forEach(btn => btn.classList.remove('active'));
     const activeButton = document.getElementById(`theme-${targetMode}-btn`);
-    if (activeButton) activeButton.classList.add('active');
+    if (activeButton) activeButton.add ? activeButton.add('active') : activeButton.classList.add('active');
 }
 
 function changeSystemAnimationSpeed(sliderValue) {
@@ -2081,7 +2297,6 @@ function changeSystemAnimationSpeed(sliderValue) {
     }
 }
 
- 
 function initWelcomeModal() {
     if (CONFIG.FEATURE_FLAGS.SHOW_WELCOME_MODAL && !localStorage.getItem('fntd2_welcome_shown')) {
         document.getElementById('welcome-overlay').style.display = 'flex';
@@ -2096,11 +2311,92 @@ function closeWelcomeModal() {
     }
 }
 
+let audioCtx = null;
+function playTacticalClick() {
+    try {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        const now = audioCtx.currentTime;
+
+        const sampleRate = audioCtx.sampleRate;
+        const bufferSize = sampleRate * 0.12;
+        const buffer = audioCtx.createBuffer(1, bufferSize, sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const noiseSource = audioCtx.createBufferSource();
+        noiseSource.buffer = buffer;
+
+        const noiseFilter = audioCtx.createBiquadFilter();
+        noiseFilter.type = 'highpass';
+        noiseFilter.frequency.setValueAtTime(3200, now);
+        noiseFilter.frequency.exponentialRampToValueAtTime(1500, now + 0.08);
+        noiseFilter.Q.setValueAtTime(2.0, now);
+
+        const noiseGain = audioCtx.createGain();
+        noiseGain.gain.setValueAtTime(0.18, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+        noiseSource.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(audioCtx.destination);
+
+        const lowOsc = audioCtx.createOscillator();
+        const lowGain = audioCtx.createGain();
+        lowOsc.type = 'triangle';
+        lowOsc.frequency.setValueAtTime(180, now);
+        lowOsc.frequency.exponentialRampToValueAtTime(45, now + 0.06);
+
+        lowGain.gain.setValueAtTime(0.22, now);
+        lowGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+        lowOsc.connect(lowGain);
+        lowGain.connect(audioCtx.destination);
+
+        const clickOsc = audioCtx.createOscillator();
+        const clickGain = audioCtx.createGain();
+        clickOsc.type = 'sine';
+        clickOsc.frequency.setValueAtTime(850, now);
+        clickOsc.frequency.linearRampToValueAtTime(2200, now + 0.02);
+
+        clickGain.gain.setValueAtTime(0.08, now);
+        clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
+
+        clickOsc.connect(clickGain);
+        clickGain.connect(audioCtx.destination);
+
+        noiseSource.start(now);
+        lowOsc.start(now);
+        clickOsc.start(now);
+
+        noiseSource.stop(now + 0.12);
+        lowOsc.stop(now + 0.12);
+        clickOsc.stop(now + 0.12);
+    } catch (err) {
+        // Silently capture any blocked browser audio audio autoplay constraints
+    }
+}
+
 function initBulletHoleFx() {
     const layer = document.getElementById('bullet-hole-layer');
     if (!layer) return;
     document.addEventListener('click', (event) => {
+        // Harmoniously play tactical USP-S click sound on any user action
+        playTacticalClick();
+
         if (document.body.classList.contains('no-bulletholes')) return;
+        
+        // Prevent background bullet holes when clicking inputs, buttons, select dropdowns or selectors
+        if (event.target.closest('button, input, select, textarea, a, .nav-btn, .unit-card-square, #settings-overlay')) {
+            return;
+        }
+
         const hole = document.createElement('div');
         hole.className = 'bullet-hole';
         hole.style.left = `${event.clientX}px`;
@@ -2116,739 +2412,5 @@ document.addEventListener('DOMContentLoaded', () => {
         welcomeOverlay.addEventListener('click', (e) => {
             if (e.target === welcomeOverlay) closeWelcomeModal();
         });
-    }
-});
-
-let adminPanelActive = false;
-const ADMIN_PASSWORD = CONFIG.getText('ADMIN.PASSWORD_VALUE');
-
-function initAdminPanel() {
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'F3' || e.key === 'f3') {
-            e.preventDefault();
-            toggleAdminPanel();
-        }
-    });
-}
-
-function toggleAdminPanel() {
-    if (!document.getElementById('admin-panel-overlay')) {
-        createAdminPanelUI();
-    }
-    const overlay = document.getElementById('admin-panel-overlay');
-    adminPanelActive = !adminPanelActive;
-    overlay.style.display = adminPanelActive ? 'flex' : 'none';
-    if (adminPanelActive) {
-        document.getElementById('admin-password-input').focus();
-    }
-}
-
-function createAdminPanelUI() {
-    const overlay = document.createElement('div');
-    overlay.id = 'admin-panel-overlay';
-    overlay.style.cssText = `
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.7);
-        z-index: 10000;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-    `;
-    
-    const panel = document.createElement('div');
-    panel.id = 'admin-panel-content';
-    panel.style.cssText = `
-        background: var(--bg-card-panel);
-        border: 2px solid var(--color-accent-blue);
-        border-radius: var(--global-radius);
-        padding: 24px;
-        width: 90%;
-        max-width: 600px;
-        max-height: 80vh;
-        overflow-y: auto;
-        color: var(--text-heading);
-    `;
-    
-    panel.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <h3 style="margin: 0; color: var(--color-accent-blue);">${CONFIG.getText('ADMIN.PANEL_TITLE')}</h3>
-            <button onclick="toggleAdminPanel()" style="background: transparent; border: none; color: var(--text-body-main); font-size: 20px; cursor: pointer;">×</button>
-        </div>
-        <div id="admin-auth-section">
-            <input type="password" id="admin-password-input" placeholder="${CONFIG.getText('ADMIN.PASSWORD_PLACEHOLDER')}" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--bg-input-field); border: 1px solid var(--border-matrix); border-radius: 4px; color: var(--text-heading);">
-            <button onclick="verifyAdminPassword()" style="width: 100%; padding: 8px; background: var(--color-accent-blue); border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">${CONFIG.getText('ADMIN.UNLOCK_BUTTON')}</button>
-        </div>
-        <div id="admin-content-section" style="display: none;">
-            <div style="display:flex; gap:8px; margin-bottom:12px;">
-                <button onclick="openAdminUnitForm()" style="flex:1; padding: 10px; background: var(--color-accent-blue); border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">${CONFIG.getText('ADMIN.ADD_UNIT_BUTTON')}</button>
-                <button onclick="exportUnits()" style="padding: 10px; background: var(--color-accent-blue-hover); border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">${CONFIG.getText('ADMIN.EXPORT_DATA')}</button>
-                <button onclick="document.getElementById('admin-import-file').click()" style="padding: 10px; background: var(--text-body-muted); border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">${CONFIG.getText('ADMIN.IMPORT_DATA')}</button>
-            </div>
-            <input id="admin-import-file" type="file" accept="application/json" style="display:none" onchange="handleImportFile(this.files)">
-            <div style="font-size:12px; color:var(--text-body-muted); margin-bottom:8px;">${CONFIG.getText('ADMIN.REPOSITORY_NOTE')}</div>
-            <div style="display:flex; gap:8px; margin-bottom:12px;">
-                <button onclick="generateDataJSSnippet()" style="flex:1; padding: 8px; background: var(--color-accent-blue); border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">📋 ${CONFIG.getText('ADMIN.GENERATE_DATA_JS')}</button>
-            </div>
-            <div id="admin-units-list" style="border-top: 1px solid var(--border-matrix); padding-top: 12px;"></div>
-        </div>
-    `;
-    
-    overlay.appendChild(panel);
-    document.body.appendChild(overlay);
-}
-
-function verifyAdminPassword() {
-    const password = document.getElementById('admin-password-input').value;
-    if (password === ADMIN_PASSWORD) {
-        document.getElementById('admin-auth-section').style.display = 'none';
-        document.getElementById('admin-content-section').style.display = 'block';
-        loadAdminUnitsList();
-    } else {
-        alert(CONFIG.getText('ADMIN.INVALID_PASSWORD'));
-        document.getElementById('admin-password-input').value = '';
-    }
-}
-
-function loadAdminUnitsList() {
-    const listDiv = document.getElementById('admin-units-list');
-    listDiv.innerHTML = '';
-    DB_UNITS.forEach(unit => {
-        const unitRow = document.createElement('div');
-        unitRow.style.cssText = `
-            padding: 10px;
-            border: 1px solid var(--border-matrix);
-            border-radius: 4px;
-            margin-bottom: 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        `;
-        unitRow.innerHTML = `
-            <div>
-                <strong>${unit.name}</strong><br>
-                <span style="font-size: 12px; color: var(--text-body-muted);">${unit.id} | ${unit.rarity}</span>
-            </div>
-            <div style="display: flex; gap: 6px;">
-                <button onclick="editAdminUnit('${unit.id}')" style="padding: 6px 10px; background: #558b55; border: none; border-radius: 3px; color: white; cursor: pointer; font-size: 12px;">✏️ ${CONFIG.getText('ADMIN.EDIT_UNIT_BUTTON')}</button>
-                <button onclick="deleteAdminUnit('${unit.id}')" style="padding: 6px 10px; background: #d32f2f; border: none; border-radius: 3px; color: white; cursor: pointer; font-size: 12px;">🗑️ ${CONFIG.getText('ADMIN.DELETE_UNIT_BUTTON')}</button>
-            </div>
-        `;
-        listDiv.appendChild(unitRow);
-    });
-}
-
-function openAdminUnitForm(unitId = null) {
-    const unit = unitId ? DB_UNITS.find(u => u.id === unitId) : null;
-    const isEdit = !!unit;
-    const draftData = loadAdminUnitDraft(unitId);
-    
-    const formOverlay = document.createElement('div');
-    formOverlay.id = 'unit-form-overlay';
-    formOverlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; z-index: 10001; overflow-y: auto;';
-    
-    const formContainer = document.createElement('div');
-    formContainer.style.cssText = 'background: var(--bg-card-panel); padding: 20px; border-radius: 8px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; border: 1px solid var(--border-matrix);';
-    
-    const title = document.createElement('h3');
-    title.textContent = isEdit ? CONFIG.getText('ADMIN.EDIT_UNIT_BUTTON') + ': ' + unit.name : CONFIG.getText('ADMIN.ADD_UNIT_BUTTON');
-    title.style.cssText = 'color: var(--text-heading); margin-bottom: 15px; margin-top: 0;';
-    formContainer.appendChild(title);
-    
-    
-    const fields = [
-        { label: CONFIG.getText('ADMIN.FORM_ID'), key: 'id', type: 'text', required: true, disabled: isEdit },
-        { label: CONFIG.getText('ADMIN.FORM_NAME'), key: 'name', type: 'text', required: true },
-        { label: CONFIG.getText('ADMIN.FORM_RARITY'), key: 'rarity', type: 'select', required: true, options: Object.keys(DB_RARITIES) },
-        { label: CONFIG.getText('ADMIN.FORM_CLASS'), key: 'class', type: 'text', required: true },
-        { label: CONFIG.getText('ADMIN.FORM_SYNERGY'), key: 'synergy', type: 'text', required: true },
-        { label: CONFIG.getText('ADMIN.FORM_ELEMENT'), key: 'element', type: 'select', required: true, options: Object.keys(DB_ELEMENTS) },
-        { label: CONFIG.getText('ADMIN.FORM_COST'), key: 'placementCost', type: 'number', required: true },
-        { label: CONFIG.getText('ADMIN.FORM_LIMIT'), key: 'placementLimit', type: 'number', required: true },
-        { label: CONFIG.getText('ADMIN.FORM_DAMAGE_MIN'), key: 'dmg_min', type: 'number', required: true },
-        { label: CONFIG.getText('ADMIN.FORM_DAMAGE_MAX'), key: 'dmg_max', type: 'number', required: true },
-        { label: CONFIG.getText('ADMIN.FORM_RANGE_MIN'), key: 'range_min', type: 'number', required: true },
-        { label: CONFIG.getText('ADMIN.FORM_RANGE_MAX'), key: 'range_max', type: 'number', required: true },
-        { label: CONFIG.getText('ADMIN.FORM_CD_MIN'), key: 'cd_min', type: 'number', required: true },
-        { label: CONFIG.getText('ADMIN.FORM_CD_MAX'), key: 'cd_max', type: 'number', required: true },
-        { label: CONFIG.getText('ADMIN.FORM_RANK'), key: 'rank', type: 'text', required: false },
-        { label: CONFIG.getText('ADMIN.FORM_RANKED_ID'), key: 'rankedId', type: 'number', required: false },
-        { label: CONFIG.getText('ADMIN.FORM_RANKED_WAVE'), key: 'rankedWave', type: 'number', required: false },
-    ];
-    
-    const formData = {};
-    
-    
-    fields.forEach(field => {
-        const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'margin-bottom: 12px;';
-        
-        const label = document.createElement('label');
-        label.textContent = field.label + (field.required ? ' *' : '');
-        label.style.cssText = 'display: block; color: var(--text-body-main); font-size: 12px; font-weight: bold; margin-bottom: 4px;';
-        wrapper.appendChild(label);
-        
-        let input;
-        if (field.type === 'select') {
-            input = document.createElement('select');
-            field.options.forEach(opt => {
-                const option = document.createElement('option');
-                option.value = opt;
-                option.textContent = opt;
-                input.appendChild(option);
-            });
-        } else {
-            input = document.createElement('input');
-            input.type = field.type;
-        }
-        
-        input.style.cssText = 'width: 100%; padding: 6px; background: var(--bg-input-field); color: var(--text-body-main); border: 1px solid var(--border-matrix); border-radius: 3px; box-sizing: border-box;';
-        if (field.disabled) input.disabled = true;
-
-        let initialValue = '';
-        if (draftData && draftData[field.key] !== undefined && draftData[field.key] !== null) {
-            initialValue = draftData[field.key];
-        } else if (isEdit) {
-            if (field.key === 'id') initialValue = unit.id;
-            else if (field.key === 'name') initialValue = unit.name;
-            else if (field.key === 'rarity') initialValue = unit.rarity;
-            else if (field.key === 'class') initialValue = unit.class;
-            else if (field.key === 'synergy') initialValue = unit.synergy;
-            else if (field.key === 'element') initialValue = unit.element;
-            else if (field.key === 'placementCost') initialValue = unit.placementCost;
-            else if (field.key === 'placementLimit') initialValue = unit.placementLimit;
-            else if (field.key === 'dmg_min') initialValue = unit.damage?.[0] ?? '';
-            else if (field.key === 'dmg_max') initialValue = unit.damage?.[1] ?? '';
-            else if (field.key === 'range_min') initialValue = unit.range?.[0] ?? '';
-            else if (field.key === 'range_max') initialValue = unit.range?.[1] ?? '';
-            else if (field.key === 'cd_min') initialValue = unit.cooldown?.[0] ?? '';
-            else if (field.key === 'cd_max') initialValue = unit.cooldown?.[1] ?? '';
-            else if (field.key === 'rank') initialValue = unit.rank ?? '';
-            else if (field.key === 'rankedId') initialValue = unit.rankedId ?? '';
-            else if (field.key === 'rankedWave') initialValue = unit.rankedWave ?? '';
-        }
-        if (initialValue !== undefined && initialValue !== null) {
-            input.value = initialValue;
-        }
-        
-        
-        if (field.key === 'id' && !isEdit) {
-            const idWrapper = document.createElement('div');
-            idWrapper.style.cssText = 'display:flex; gap:8px;';
-            input.style.cssText = 'flex:1; padding: 6px; background: var(--bg-input-field); color: var(--text-body-main); border: 1px solid var(--border-matrix); border-radius: 3px; box-sizing: border-box;';
-            const idGenerateBtn = document.createElement('button');
-            idGenerateBtn.type = 'button';
-            idGenerateBtn.textContent = 'Gen';
-            idGenerateBtn.style.cssText = 'padding:6px 8px; background: var(--color-accent-blue-hover); color: white; border: none; border-radius: 3px; cursor: pointer; font-size:12px; font-weight:bold;';
-            idGenerateBtn.onclick = () => {
-                const newId = generateUniqueId();
-                input.value = newId;
-                formData.id = newId;
-            };
-            idWrapper.appendChild(input);
-            idWrapper.appendChild(idGenerateBtn);
-            wrapper.appendChild(idWrapper);
-            formContainer.appendChild(wrapper);
-            
-            
-            formData.id = draftData?.id || '';
-            input.addEventListener('input', (e) => {
-                formData.id = e.target.value;
-                saveAdminUnitDraft(unitId, formData);
-            });
-            return;
-        }
-        
-input.addEventListener('input', (e) => {
-                formData[field.key] = field.type === 'number' ? parseFloat(e.target.value) : e.target.value;
-                saveAdminUnitDraft(unitId, formData);
-            });
-        
-        
-        if (draftData && draftData[field.key] !== undefined) {
-            formData[field.key] = draftData[field.key];
-        } else if (isEdit) {
-            if (field.key === 'id') formData[field.key] = unit.id;
-            else if (field.key === 'name') formData[field.key] = unit.name;
-            else if (field.key === 'rarity') formData[field.key] = unit.rarity;
-            else if (field.key === 'class') formData[field.key] = unit.class;
-            else if (field.key === 'synergy') formData[field.key] = unit.synergy;
-            else if (field.key === 'element') formData[field.key] = unit.element;
-            else if (field.key === 'placementCost') formData[field.key] = unit.placementCost;
-            else if (field.key === 'placementLimit') formData[field.key] = unit.placementLimit;
-            else if (field.key === 'dmg_min') formData[field.key] = unit.damage?.[0] ?? '';
-            else if (field.key === 'dmg_max') formData[field.key] = unit.damage?.[1] ?? '';
-            else if (field.key === 'range_min') formData[field.key] = unit.range?.[0] ?? '';
-            else if (field.key === 'range_max') formData[field.key] = unit.range?.[1] ?? '';
-            else if (field.key === 'cd_min') formData[field.key] = unit.cooldown?.[0] ?? '';
-            else if (field.key === 'cd_max') formData[field.key] = unit.cooldown?.[1] ?? '';
-            else if (field.key === 'rank') formData[field.key] = unit.rank ?? '';
-            else if (field.key === 'rankedId') formData[field.key] = unit.rankedId ?? '';
-            else if (field.key === 'rankedWave') formData[field.key] = unit.rankedWave ?? '';
-            else formData[field.key] = unit[field.key] !== undefined ? unit[field.key] : '';
-        } else {
-            formData[field.key] = input.value || '';
-        }
-        
-        wrapper.appendChild(input);
-        formContainer.appendChild(wrapper);
-    });
-    
-    
-    const subclassWrapper = document.createElement('div');
-    subclassWrapper.style.cssText = 'margin-bottom: 12px;';
-    const subclassLabel = document.createElement('label');
-    subclassLabel.textContent = 'Subclasses (comma-separated)';
-    subclassLabel.style.cssText = 'display: block; color: var(--text-body-main); font-size: 12px; font-weight: bold; margin-bottom: 4px;';
-    const subclassInput = document.createElement('input');
-    subclassInput.type = 'text';
-    subclassInput.placeholder = 'DPS,Healer,Support';
-    subclassInput.style.cssText = 'width: 100%; padding: 6px; background: var(--bg-input-field); color: var(--text-body-main); border: 1px solid var(--border-matrix); border-radius: 3px; box-sizing: border-box;';
-    subclassInput.value = draftData?.subclasses?.join(', ') ?? (isEdit ? unit.subclasses.join(', ') : '');
-    subclassInput.addEventListener('input', (e) => {
-        formData.subclasses = e.target.value.split(',').map(s => s.trim()).filter(s => s);
-        saveAdminUnitDraft(unitId, formData);
-    });
-    formData.subclasses = draftData?.subclasses ?? (isEdit ? unit.subclasses : []);
-    subclassWrapper.appendChild(subclassLabel);
-    subclassWrapper.appendChild(subclassInput);
-    formContainer.appendChild(subclassWrapper);
-    
-    
-    const obtainWrapper = document.createElement('div');
-    obtainWrapper.style.cssText = 'margin-bottom: 12px; padding: 10px; background: var(--bg-input-field); border-radius: 4px;';
-    const obtainLabel = document.createElement('label');
-    obtainLabel.textContent = 'Obtainments (one per line: source|chance|method)';
-    obtainLabel.style.cssText = 'display: block; color: var(--text-body-main); font-size: 12px; font-weight: bold; margin-bottom: 4px;';
-    const obtainInput = document.createElement('textarea');
-    obtainInput.style.cssText = 'width: 100%; padding: 6px; background: var(--bg-card-panel); color: var(--text-body-main); border: 1px solid var(--border-matrix); border-radius: 3px; box-sizing: border-box; font-family: monospace; font-size: 11px; height: 80px;';
-    obtainInput.placeholder = 'Wave 1|100|Guaranteed\nChest|50|Random Drop';
-    obtainInput.value = draftData?.obtainments ? draftData.obtainments.map(o => `${o.source}|${o.chance}|${o.method}`).join('\n') : (isEdit && unit.obtainments ? unit.obtainments.map(o => `${o.source}|${o.chance}|${o.method}`).join('\n') : '');
-    obtainInput.addEventListener('input', (e) => {
-        const lines = e.target.value.split('\n').filter(line => line.trim());
-        formData.obtainments = lines.map(line => {
-            const [source, chance, method] = line.split('|').map(s => s.trim());
-            return { source, chance: parseInt(chance) || 0, method };
-        });
-        saveAdminUnitDraft(unitId, formData);
-    });
-    formData.obtainments = draftData?.obtainments ?? (isEdit && unit.obtainments ? unit.obtainments : []);
-    obtainWrapper.appendChild(obtainLabel);
-    obtainWrapper.appendChild(obtainInput);
-    formContainer.appendChild(obtainWrapper);
-    
-    
-    const aliasWrapper = document.createElement('div');
-    aliasWrapper.style.cssText = 'margin-bottom: 12px;';
-    const aliasLabel = document.createElement('label');
-    aliasLabel.textContent = 'Aliases (comma-separated unit IDs)';
-    aliasLabel.style.cssText = 'display: block; color: var(--text-body-main); font-size: 12px; font-weight: bold; margin-bottom: 4px;';
-    const aliasInput = document.createElement('input');
-    aliasInput.type = 'text';
-    aliasInput.placeholder = 'U001,U002,U003';
-    aliasInput.style.cssText = 'width: 100%; padding: 6px; background: var(--bg-input-field); color: var(--text-body-main); border: 1px solid var(--border-matrix); border-radius: 3px; box-sizing: border-box;';
-    aliasInput.value = draftData?.aliases?.join(', ') ?? (isEdit && unit.aliases ? unit.aliases.join(', ') : '');
-    aliasInput.addEventListener('input', (e) => {
-        formData.aliases = e.target.value.split(',').map(s => s.trim()).filter(s => s);
-        saveAdminUnitDraft(unitId, formData);
-    });
-    formData.aliases = draftData?.aliases ?? (isEdit && unit.aliases ? unit.aliases : []);
-    aliasWrapper.appendChild(aliasLabel);
-    aliasWrapper.appendChild(aliasInput);
-    formContainer.appendChild(aliasWrapper);
-
-    const fanmadeWrapper = document.createElement('div');
-    fanmadeWrapper.style.cssText = 'margin-bottom: 12px; padding: 10px; background: var(--bg-input-field); border-radius: 4px;';
-    const fanmadeLabel = document.createElement('label');
-    fanmadeLabel.textContent = CONFIG.getText('ADMIN.FORM_FANMADE_BUFFS') + ' (one per line: name|description)';
-    fanmadeLabel.style.cssText = 'display: block; color: var(--text-body-main); font-size: 12px; font-weight: bold; margin-bottom: 4px;';
-    const fanmadeInput = document.createElement('textarea');
-    fanmadeInput.style.cssText = 'width: 100%; padding: 6px; background: var(--bg-card-panel); color: var(--text-body-main); border: 1px solid var(--border-matrix); border-radius: 3px; box-sizing: border-box; font-family: monospace; font-size: 11px; height: 80px;';
-    fanmadeInput.placeholder = 'Strength Boost|+15% damage when attacking single target\nSpeed Buff|+10% attack speed after 5 hits';
-    fanmadeInput.value = draftData?.fanmadeBuffs ? draftData.fanmadeBuffs.map(p => `${p.name}|${p.desc}`).join('\n') : (isEdit && unit.fanmadeBuffs ? unit.fanmadeBuffs.map(p => `${p.name}|${p.desc}`).join('\n') : '');
-    fanmadeInput.addEventListener('input', (e) => {
-        const lines = e.target.value.split('\n').filter(l => l.trim());
-        formData.fanmadeBuffs = lines.map(l => {
-            const [name, desc] = l.split('|').map(s => s.trim());
-            return { name, desc: desc || '' };
-        });
-        saveAdminUnitDraft(unitId, formData);
-    });
-    formData.fanmadeBuffs = draftData?.fanmadeBuffs ?? (isEdit && unit.fanmadeBuffs ? unit.fanmadeBuffs : []);
-    fanmadeWrapper.appendChild(fanmadeLabel);
-    fanmadeWrapper.appendChild(fanmadeInput);
-    formContainer.appendChild(fanmadeWrapper);
-
-    const subunitsWrapper = document.createElement('div');
-    subunitsWrapper.style.cssText = 'margin-bottom: 12px; padding: 10px; background: var(--bg-input-field); border-radius: 4px;';
-    const subunitsLabel = document.createElement('label');
-    subunitsLabel.textContent = CONFIG.getText('ADMIN.FORM_SUBUNITS') + ' (one per line: unitId|note)';
-    subunitsLabel.style.cssText = 'display: block; color: var(--text-body-main); font-size: 12px; font-weight: bold; margin-bottom: 4px;';
-    const subunitsInput = document.createElement('textarea');
-    subunitsInput.style.cssText = 'width: 100%; padding: 6px; background: var(--bg-card-panel); color: var(--text-body-main); border: 1px solid var(--border-matrix); border-radius: 3px; box-sizing: border-box; font-family: monospace; font-size: 11px; height: 80px;';
-    subunitsInput.placeholder = 'U012|Remake with artillery charge\nU045|Unofficial support variant';
-    subunitsInput.value = draftData?.subUnits ? draftData.subUnits.map(item => `${item.id}|${item.note || ''}`).join('\n') : (isEdit && unit.subUnits ? unit.subUnits.map(item => `${item.id}|${item.note || ''}`).join('\n') : '');
-    subunitsInput.addEventListener('input', (e) => {
-        const lines = e.target.value.split('\n').filter(l => l.trim());
-        formData.subUnits = lines.map(l => {
-            const [id, note] = l.split('|').map(s => s.trim());
-            return { id, note: note || '' };
-        });
-        saveAdminUnitDraft(unitId, formData);
-    });
-    formData.subUnits = draftData?.subUnits ?? (isEdit && unit.subUnits ? unit.subUnits : []);
-    subunitsWrapper.appendChild(subunitsLabel);
-    subunitsWrapper.appendChild(subunitsInput);
-    formContainer.appendChild(subunitsWrapper);
-
-    const passivesWrapper = document.createElement('div');
-    passivesWrapper.style.cssText = 'margin-bottom: 12px; padding: 10px; background: var(--bg-input-field); border-radius: 4px;';
-    const passivesLabel = document.createElement('label');
-    passivesLabel.textContent = 'Passives (one per line: name|description)';
-    passivesLabel.style.cssText = 'display: block; color: var(--text-body-main); font-size: 12px; font-weight: bold; margin-bottom: 4px;';
-    const passivesInput = document.createElement('textarea');
-    passivesInput.style.cssText = 'width: 100%; padding: 6px; background: var(--bg-card-panel); color: var(--text-body-main); border: 1px solid var(--border-matrix); border-radius: 3px; box-sizing: border-box; font-family: monospace; font-size: 11px; height: 80px;';
-    passivesInput.placeholder = 'Hat Toss|applies bleed for 1s\nSpecialty Cupcake|burn on 5th attack';
-    passivesInput.value = draftData?.passives ? draftData.passives.map(p => `${p.name}|${p.desc}`).join('\n') : (isEdit && unit.passives ? unit.passives.map(p => `${p.name}|${p.desc}`).join('\n') : '');
-    passivesInput.addEventListener('input', (e) => {
-        const lines = e.target.value.split('\n').filter(l => l.trim());
-        formData.passives = lines.map(l => {
-            const [name, desc] = l.split('|').map(s => s.trim());
-            return { name, desc };
-        });
-        saveAdminUnitDraft(unitId, formData);
-    });
-    formData.passives = draftData?.passives ?? (isEdit && unit.passives ? unit.passives : []);
-    passivesWrapper.appendChild(passivesLabel);
-    passivesWrapper.appendChild(passivesInput);
-    formContainer.appendChild(passivesWrapper);
-
-    
-    const abilitiesWrapper = document.createElement('div');
-    abilitiesWrapper.style.cssText = 'margin-bottom: 12px; padding: 10px; background: var(--bg-input-field); border-radius: 4px;';
-    const abilitiesLabel = document.createElement('label');
-    abilitiesLabel.textContent = 'Abilities (one per line: name|description)';
-    abilitiesLabel.style.cssText = 'display: block; color: var(--text-body-main); font-size: 12px; font-weight: bold; margin-bottom: 4px;';
-    const abilitiesInput = document.createElement('textarea');
-    abilitiesInput.style.cssText = 'width: 100%; padding: 6px; background: var(--bg-card-panel); color: var(--text-body-main); border: 1px solid var(--border-matrix); border-radius: 3px; box-sizing: border-box; font-family: monospace; font-size: 11px; height: 80px;';
-    abilitiesInput.placeholder = 'Glock Shot|High damage single target\nHeal Wave|Heals allies in range';
-    abilitiesInput.value = draftData?.abilities ? draftData.abilities.map(p => `${p.name}|${p.desc}`).join('\n') : (isEdit && unit.abilities ? unit.abilities.map(p => `${p.name}|${p.desc}`).join('\n') : '');
-    abilitiesInput.addEventListener('input', (e) => {
-        const lines = e.target.value.split('\n').filter(l => l.trim());
-        formData.abilities = lines.map(l => {
-            const [name, desc] = l.split('|').map(s => s.trim());
-            return { name, desc };
-        });
-        saveAdminUnitDraft(unitId, formData);
-    });
-    formData.abilities = draftData?.abilities ?? (isEdit && unit.abilities ? unit.abilities : []);
-    abilitiesWrapper.appendChild(abilitiesLabel);
-    abilitiesWrapper.appendChild(abilitiesInput);
-    formContainer.appendChild(abilitiesWrapper);
-    
-    
-    const buttonContainer = document.createElement('div');
-    buttonContainer.style.cssText = 'display: flex; gap: 10px; margin-top: 15px;';
-    
-    const saveBtn = document.createElement('button');
-    saveBtn.textContent = isEdit ? CONFIG.getText('ADMIN.SAVE_UNIT') : CONFIG.getText('ADMIN.ADD_UNIT_BUTTON');
-    saveBtn.style.cssText = 'flex: 1; padding: 10px; background: var(--color-accent-blue); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;';
-    saveBtn.onclick = () => {
-        submitUnitForm(formData, isEdit, formOverlay, unitId);
-    };
-    
-    const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = CONFIG.getText('ADMIN.CANCEL');
-    cancelBtn.style.cssText = 'flex: 1; padding: 10px; background: var(--text-body-muted); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;';
-    cancelBtn.onclick = () => {
-        formOverlay.remove();
-    };
-    
-    buttonContainer.appendChild(saveBtn);
-    buttonContainer.appendChild(cancelBtn);
-    formContainer.appendChild(buttonContainer);
-    
-    formOverlay.appendChild(formContainer);
-    document.body.appendChild(formOverlay);
-    
-    formOverlay.addEventListener('click', (e) => {
-        if (e.target === formOverlay) formOverlay.remove();
-    });
-}
-
-function submitUnitForm(formData, isEdit, formOverlay, unitId) {
-    
-    const required = ['id', 'name', 'rarity', 'class', 'synergy', 'element', 'placementCost', 'placementLimit', 'dmg_min', 'dmg_max', 'range_min', 'range_max', 'cd_min', 'cd_max'];
-    for (let field of required) {
-        if (!formData[field]) {
-            alert('Missing required field: ' + field);
-            return;
-        }
-    }
-    
-    
-    const newUnit = {
-        id: formData.id,
-        name: formData.name,
-        rarity: formData.rarity,
-        class: formData.class,
-        subclasses: formData.subclasses || [],
-        synergy: formData.synergy,
-        placementCost: formData.placementCost,
-        placementLimit: formData.placementLimit,
-        obtainments: formData.obtainments || [],
-        aliases: formData.aliases || [],
-        fanmadeBuffs: formData.fanmadeBuffs || [],
-        subUnits: formData.subUnits || [],
-        damage: [formData.dmg_min, formData.dmg_max],
-        range: [formData.range_min, formData.range_max],
-        cooldown: [formData.cd_min, formData.cd_max],
-        element: formData.element,
-        passives: formData.passives || [],
-        abilities: formData.abilities || [],
-        image: '',
-        rank: formData.rank || 'F',
-        rankedId: formData.rankedId || 0,
-        rankedWave: formData.rankedWave || 0
-    };
-    
-    if (isEdit) {
-        
-        const idx = DB_UNITS.findIndex(u => u.id === newUnit.id);
-        if (idx >= 0) {
-            DB_UNITS[idx] = { ...newUnit, isCustom: DB_UNITS[idx].isCustom !== false };
-        }
-    } else {
-        DB_UNITS.push({ ...newUnit, isCustom: true });
-    }
-    const deletedIds = getDeletedUnitIds();
-    if (deletedIds.has(newUnit.id)) {
-        deletedIds.delete(newUnit.id);
-        saveDeletedUnitIds(deletedIds);
-    }
-    
-    
-    saveCustomUnitsToStorage();
-    clearAdminUnitDraft(unitId);
-    
-    alert(CONFIG.getText('ADMIN.SUCCESS_MESSAGE'));
-    formOverlay.remove();
-    loadAdminUnitsList();
-}
-
-function editAdminUnit(unitId) {
-    openAdminUnitForm(unitId);
-}
-
-function deleteAdminUnit(unitId) {
-    if (confirm('Delete unit ' + unitId + '?')) {
-        const idx = DB_UNITS.findIndex(u => u.id === unitId);
-        if (idx >= 0) DB_UNITS.splice(idx, 1);
-        const deletedIds = getDeletedUnitIds();
-        deletedIds.add(unitId);
-        saveDeletedUnitIds(deletedIds);
-        saveCustomUnitsToStorage();
-        loadAdminUnitsList();
-        renderTierlist();
-        renderManualBuilderPool();
-        renderTeamUnitSelector();
-        alert(CONFIG.getText('MESSAGES.UNIT_DELETED') || 'Unit deleted');
-    }
-}
-
- 
-
-function generateUniqueId() {
-    
-    const existingIds = DB_UNITS
-        .map(u => u.id)
-        .filter(id => /^U\d+$/.test(id))
-        .map(id => parseInt(id.substring(1)))
-        .sort((a, b) => a - b);
-    
-    const nextNum = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
-    return 'U' + String(nextNum).padStart(3, '0');
-}
-
-function exportUnits() {
-    const dataStr = JSON.stringify(DB_UNITS, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'fntd2_units_export.json';
-    link.click();
-    URL.revokeObjectURL(url);
-    alert('Units exported to fntd2_units_export.json');
-}
-
-function handleImportFile(files) {
-    if (files.length === 0) return;
-    const file = files[0];
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const importedUnits = JSON.parse(e.target.result);
-            if (!Array.isArray(importedUnits)) {
-                alert('Invalid file: must contain array of units');
-                return;
-            }
-            
-            
-            importedUnits.forEach(importedUnit => {
-                const existingIndex = DB_UNITS.findIndex(u => u.id === importedUnit.id);
-                if (existingIndex >= 0) {
-                    DB_UNITS[existingIndex] = importedUnit;
-                } else {
-                    DB_UNITS.push(importedUnit);
-                }
-            });
-            
-            saveCustomUnitsToStorage();
-            loadAdminUnitsList();
-            alert('Imported ' + importedUnits.length + ' units successfully');
-        } catch (err) {
-            alert('Error parsing JSON: ' + err.message);
-        }
-    };
-    reader.readAsText(file);
-}
-
-function generateDataJSSnippet() {
-    const snippet = 'const DB_UNITS = ' + JSON.stringify(DB_UNITS, null, 2) + ';';
-    
-    const modal = document.createElement('div');
-    modal.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:10002;';
-    
-    const content = document.createElement('div');
-    content.style.cssText = 'background: var(--bg-card-panel); padding: 20px; border-radius: 8px; max-width: 600px; max-height: 80vh; overflow-y: auto; border: 1px solid var(--border-matrix);';
-    
-    const title = document.createElement('h3');
-    title.textContent = 'Copy data.js Snippet';
-    title.style.cssText = 'color: var(--text-heading); margin: 0 0 10px 0;';
-    content.appendChild(title);
-    
-    const description = document.createElement('p');
-    description.textContent = 'Copy the code below and paste it into your data.js file:';
-    description.style.cssText = 'color: var(--text-body-main); font-size: 12px; margin: 0 0 10px 0;';
-    content.appendChild(description);
-    
-    const codeBlock = document.createElement('textarea');
-    codeBlock.value = snippet;
-    codeBlock.readOnly = true;
-    codeBlock.style.cssText = 'width: 100%; height: 300px; padding: 10px; background: var(--bg-input-field); color: var(--text-body-main); border: 1px solid var(--border-matrix); border-radius: 3px; font-family: monospace; font-size: 11px; box-sizing: border-box;';
-    content.appendChild(codeBlock);
-    
-    const btnContainer = document.createElement('div');
-    btnContainer.style.cssText = 'display: flex; gap: 10px; margin-top: 10px;';
-    
-    const copyBtn = document.createElement('button');
-    copyBtn.textContent = '📋 Copy to Clipboard';
-    copyBtn.style.cssText = 'flex:1; padding: 8px; background: var(--color-accent-blue); color: white; border: none; border-radius: 3px; cursor: pointer; font-weight: bold;';
-    copyBtn.onclick = () => {
-        navigator.clipboard.writeText(snippet).then(() => {
-            alert('Copied to clipboard!');
-            modal.remove();
-        });
-    };
-    btnContainer.appendChild(copyBtn);
-    
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = 'Close';
-    closeBtn.style.cssText = 'flex:1; padding: 8px; background: var(--text-body-muted); color: white; border: none; border-radius: 3px; cursor: pointer; font-weight: bold;';
-    closeBtn.onclick = () => modal.remove();
-    btnContainer.appendChild(closeBtn);
-    
-    content.appendChild(btnContainer);
-    modal.appendChild(content);
-    document.body.appendChild(modal);
-}
-
- 
-
-let currentDetailTab = 'stats';
-
-function switchDetailTab(tabName) {
-    currentDetailTab = tabName;
-    const tabs = document.querySelectorAll('[data-detail-tab]');
-    const contents = document.querySelectorAll('[data-detail-content]');
-    
-    tabs.forEach(t => t.classList.remove('active'));
-    contents.forEach(c => c.style.display = 'none');
-    
-    document.querySelector(`[data-detail-tab="${tabName}"]`)?.classList.add('active');
-    document.querySelector(`[data-detail-content="${tabName}"]`).style.display = 'block';
-}
-
-function formatObtainments(obtainmentsData) {
-    
-    if (typeof obtainmentsData === 'string') {
-        return `<div style="font-size:13px; color:var(--text-heading);">${obtainmentsData}</div>`;
-    }
-    
-    if (!Array.isArray(obtainmentsData) || obtainmentsData.length === 0) {
-        return `<div style="color:var(--text-body-muted); font-size:13px;">No obtainment data.</div>`;
-    }
-    
-    const sorted = [...obtainmentsData].sort((a, b) => b.chance - a.chance);
-    let html = `<table style="width:100%; border-collapse: collapse; font-size:13px;">
-        <thead>
-            <tr style="border-bottom: 2px solid var(--border-matrix);">
-                <th style="text-align:left; padding:8px; color:var(--text-body-muted);">Source</th>
-                <th style="text-align:center; padding:8px; color:var(--text-body-muted);">Chance</th>
-                <th style="text-align:left; padding:8px; color:var(--text-body-muted);">Method</th>
-            </tr>
-        </thead>
-        <tbody>`;
-    
-    sorted.forEach(obt => {
-        html += `<tr style="border-bottom: 1px solid var(--border-matrix);">
-            <td style="padding:8px;">${obt.source}</td>
-            <td style="text-align:center; padding:8px; color:var(--color-accent-blue); font-weight:bold;">${obt.chance}%</td>
-            <td style="padding:8px;">${obt.method}</td>
-        </tr>`;
-    });
-    
-    html += `</tbody></table>`;
-    return html;
-}
-
-function formatAliases(aliases, currentUnitId) {
-    if (!Array.isArray(aliases) || aliases.length === 0) {
-        return `<div style="color:var(--text-body-muted); font-size:13px;">No aliases available.</div>`;
-    }
-    
-    let html = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;">`;
-    
-    aliases.forEach(aliasId => {
-        const aliasUnit = DB_UNITS.find(u => u.id === aliasId);
-        if (aliasUnit) {
-            html += `<button onclick="visualizeSpecificUnitSubpage(DB_UNITS.find(u => u.id === '${aliasId}'))" style="
-                padding: 10px;
-                background: var(--bg-input-field);
-                border: 1px solid var(--color-accent-blue);
-                border-radius: 4px;
-                color: var(--text-heading);
-                cursor: pointer;
-                font-weight: 600;
-                text-align: center;
-                transition: all var(--anim-speed-factor);
-            " onmouseover="this.style.background = var(--color-accent-blue); this.style.color = 'white';" onmouseout="this.style.background = 'var(--bg-input-field)'; this.style.color = 'var(--text-heading)';">
-                🔗 ${aliasUnit.name}
-            </button>`;
-        }
-    });
-    
-    html += `</div>`;
-    return html;
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    initAdminPanel();
-    if (typeof loadCustomUnitsFromStorage === 'function') {
     }
 });

@@ -155,11 +155,11 @@ const CONFIG = {
       FILTER_CLASS: "All Classes",
       FILTER_SUBCLASS: "All Subclasses",
       DESCRIPTION: "A tier list ranking units based on performance.",
-      EXPLAIN_LINE_1: "Units are ranked based on their performance in Endless mode.",
-      EXPLAIN_LINE_2: "Boosters are ranked by how they improve Mid A units.",
-      EXPLAIN_LINE_3: "Heroes are ranked by synergy with other units of the same element.",
-      EXPLAIN_LINE_4: "Units under 1k cash receive no rewards.",
-      EXPLAIN_LINE_5: "Units over 1k cash receive rewards based on placement cost.",
+      EXPLAIN_LINE_1: "Endless runs determine rankings based on wave counts achieved in their base state.",
+      EXPLAIN_LINE_2: "Boosters are ranked according to how they amplify Mid are units.",
+      EXPLAIN_LINE_3: "Heroes are evaluated according to elemental synergy setups.",
+      EXPLAIN_LINE_4: "Units costing under 1k cash receive no special rewards.",
+      EXPLAIN_LINE_5: "Higher tier cost placement units receive proportional rewards.",
     },
 
     ADMIN: {
@@ -437,7 +437,7 @@ const CONFIG = {
     ENABLE_COST_VISIBILITY_TOGGLE: true,
     ENABLE_RANK_HOVER: true,
     ENABLE_TEAM_GENERATOR: true,
-    ENABLE_ENEMY_CODEX: false, // Removed as requested
+    ENABLE_ENEMY_CODEX: false, 
     ENABLE_TIERLIST_FILTERS: true,
     ENABLE_UNIT_CREATOR: true,
     ENABLE_FANMADE_FEATURES: true,
@@ -483,13 +483,6 @@ const CONFIG = {
     GROUND_HEIGHT: "30%",
     GROUND_BORDER_COLOR: "#5c2b0e", 
     
-    // Desert Elements 
-    CACTUS_LEFT: "",  
-    CACTUS_RIGHT: "", 
-    HOUSE_1: "",      
-    HOUSE_2: "",      
-    JUMPING_CUBE: "", 
-    
     CACTUS_COLOR: "#2e8b57", 
     CACTUS_DARK_COLOR: "#006400", 
     HOUSE_COLOR: "#8b4513", 
@@ -515,7 +508,7 @@ const CONFIG = {
   getText(path) {
     const keys = path.split(".");
     let value = this.TEXTS;
-      for (const key of keys) {
+    for (const key of keys) {
       value = value[key];
       if (!value) return path;
     }
